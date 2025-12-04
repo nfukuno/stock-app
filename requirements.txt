@@ -2,3 +2,8 @@ fastapi
 uvicorn[standard]
 jinja2
 yfinance
+matplotlib
+requests
+matplotlib
+pandas
+numpy
