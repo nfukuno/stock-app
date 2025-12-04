@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>Stock Drawdown Checker</title>
+    <style>
+        table {
+            border-collapse: collapse;
+            width: 100%;
+        }
+        th, td {
+            border: 1px solid #aaa;
+            padding: 6px;
+            text-align: center;
+        }
+        th {
+            background-color: #eee;
+        }
+        /* 評価セルの色分け */
+        .eval.◎ {
+            background-color: red;
+            color: white;
+            font-weight: bold;
+        }
+        .eval.〇 {
+            background-color: pink;
+            color: black;
+            font-weight: bold;
+        }
+        .eval.□ {
+            background-color: lightgreen;
+            color: black;
+            font-weight: bold;
+        }
+        .eval.△ {
+            background-color: yellow;
+            color: black;
+            font-weight: bold;
+        }
+        /* 最高値セルを青にする */
+        .blue {
+            background-color: lightblue;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <h2>Stock Drawdown Checker</h2>
+    <p>実行日時: {{ exec_time }}</p>
+
+    <div class="legend">
+        <p>🔴 ◎ … 過去6カ月の最高値から30%以上下落かつ過去3カ月の最高値から20%以上下落</p>
+        <p>🟠 ○ … 過去6カ月の最高値から30%以上下落</p>
+        <p>🟡 △ … 過去3カ月の最高値から20%以上下落</p>
+        <p>🟢 □ … 過去6カ月の最高値から20%以上下落</p>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Number</th>
+                <th>銘柄名</th>
+                <th>Symbol</th>
+                <th>評価</th>
+                <th>取得日時</th>
+                <th>最新値</th>
+                <th>前日終値</th>
+                <th>前日比</th>
+                <th>前3カ月高値比</th>
+                <th>前6カ月高値比</th>
+                <th>過去最高値比</th>
+                <th>前3カ月高値日</th>
+                <th>前3カ月最高値</th>
+                <th>前6カ月高値日</th>
+                <th>前6カ月最高値</th>
+                <th>過去最高値日</th>
+                <th>過去最高値</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in results %}
+            <tr>
+                <td>{{ row.number }}</td>
+                <td>{{ row.name }}</td>
+                <td>{{ row.symbol }}</td>
+                <td class="eval {{ row.evaluation }}">{{ row.evaluation }}</td>
+                <td>{{ row.latest_date }}</td>
+                <td>{{ row.latest_price }}</td>
+                <td>{{ row.prev_close }}</td>
+                <td>{{ row.change }}</td>
+                <td>{{ row.drawdown_3m }}</td>
+                <td>{{ row.drawdown_6m }}</td>
+                <td>{{ row.drawdown_all }}</td>
+                <td>{{ row.max_date_3m }}</td>
+                <td class="{{ row.highlight_3m }}">{{ row.max_price_3m }}</td>
+                <td>{{ row.max_date_6m }}</td>
+                <td class="{{ row.highlight_6m }}">{{ row.max_price_6m }}</td>
+                <td>{{ row.max_date_all }}</td>
+                <td class="{{ row.highlight_all }}">{{ row.max_price_all }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</body>
+</html>

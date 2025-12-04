@@ -1,0 +1,10 @@
+# 環境変数ファイル
+.env
+*.env
+
+# Pythonキャッシュ
+__pycache__/
+*.pyc
+
+# 出力ファイル（画像など）
+output/

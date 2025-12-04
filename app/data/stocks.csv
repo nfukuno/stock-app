@@ -1,0 +1,21 @@
+number,name,symbol
+1,International Business Machines,IBM
+2,CrowdStrike Holdings Inc.,CRWD
+3,NVIDIA Corp.,NVDA
+4,Apple Inc.,AAPL
+5,Alphabet Inc.,GOOGL
+6,Broadcom Inc.,AVGO
+7,Microsoft Corp.,MSFT
+8,ServiceNow Inc.,NOW
+9,Amazon.com Inc.,AMZN
+10,Netflix Inc.,NFLX
+11,Meta Platforms Inc.,META
+12,S&P 500,^GSPC
+13,NASDAQ 100,^NDX
+14,MSCI AC World Equity,ACWI
+15,MSCI Emerging Markets,EEM
+16,NYSE FANG+ Index,^NYFANG
+17,SPDR S&P Aerospace,XAR
+18,PHLX Semiconductor,^SOX
+19,Vanguard Russell 2000 Growth,VTWG
+20,Nifty 50,^NSEI

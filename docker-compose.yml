@@ -1,0 +1,15 @@
+services:
+  stock-app:
+    build: .
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    environment:
+      - ALPHAVANTAGE_API_KEY=${ALPHAVANTAGE_API_KEY}
+    volumes:
+      - ./app/data/stocks.csv:/app/data/stocks.csv
+      - ./app/templates:/app/app/templates
