@@ -6,10 +6,9 @@ from dotenv import load_dotenv
 def send_line_notification(message: str, image_url: str = None):
     # LINE用の.envを読み込む
     load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"))
-
     ACCESS_TOKEN = os.getenv("LINE_ACCESS_TOKEN")
     USER_ID = os.getenv("LINE_USER_ID")
-
+    
     headers = {
         "Authorization": f"Bearer {ACCESS_TOKEN}",
         "Content-Type": "application/json"
