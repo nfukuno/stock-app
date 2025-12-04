@@ -5,6 +5,3 @@
 # Pythonキャッシュ
 __pycache__/
 *.pyc
-
-# 出力ファイル（画像など）
-output/
