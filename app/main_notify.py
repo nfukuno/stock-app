@@ -21,7 +21,7 @@ message = f"{timestamp.replace('-', ':')}時点の記録"
 
 # 画像URL（テスト時は仮のURL。GitHub Pagesやサーバーにアップロードして利用）
 #IMAGE_URL = "https://yourdomain.com/output/" + filename.split("/")[-1]
-IMAGE_URL = f"https://nfukuno.github.io/stock-app/output/{filename}"
+IMAGE_URL = f"https://nfukuno.github.io/stock-app/{filename}"
 print(IMAGE_URL)
 
 
