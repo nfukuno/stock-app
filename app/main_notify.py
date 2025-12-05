@@ -20,7 +20,9 @@ filename = generate_stock_image(df, timestamp)
 message = f"{timestamp.replace('-', ':')}時点の記録"
 
 # 画像URL（テスト時は仮のURL。GitHub Pagesやサーバーにアップロードして利用）
-IMAGE_URL = "https://yourdomain.com/output/" + filename.split("/")[-1]
+#IMAGE_URL = "https://yourdomain.com/output/" + filename.split("/")[-1]
+IMAGE_URL = f"https://nfukuno.github.io/stock-app/output/{filename}"
+
 
 # LINE通知送信
 send_line_notification(message, IMAGE_URL)
