@@ -4,7 +4,8 @@ on:
   workflow_dispatch:     # 手動実行
   schedule:
     - cron: '5 8 * * *'   # 毎日UTC8時（日本時間17:05）に実行
-
+permissions:
+  contents: write
 jobs:
   notify:
     runs-on: ubuntu-latest
