@@ -4,6 +4,10 @@ jinja2
 yfinance
 matplotlib
 requests
-matplotlib
 pandas
 numpy
+pydantic
+python-dotenv
+jpholiday
+pytest
+httpx
