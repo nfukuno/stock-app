@@ -83,3 +83,13 @@ def test_results_csv():
     assert row["pred_change_atr"] == 0.6 and row["act_change_atr"] == 0.7
     assert row["weekday"] == 3 and row["memo"] == "メモ テスト"
     assert row["skill"] == 30.0
+
+
+def test_github_list_symbols(monkeypatch):
+    listing = [{"name": "2026-10-09_5801.T.json"}, {"name": "2026-10-09_7203.T.json"},
+               {"name": "2026-10-08_6758.T.json"}, {"name": "readme.md"}]
+    monkeypatch.setattr(store.requests, "get",
+                        lambda url, **k: FakeResp(200, listing) if url.endswith("/forecasts/2026/10") else FakeResp(404))
+    st = store.GitHubStore(repo="o/r", branch="main", token="t")
+    assert st.list_symbols("2026-10-09") == ["5801.T", "7203.T"]
+    assert st.list_symbols("2026-11-02") == []

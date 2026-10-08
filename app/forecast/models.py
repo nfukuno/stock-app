@@ -31,6 +31,7 @@ class ForecastIn(BaseModel):
     scenario: str
     confidence: int = Field(ge=1, le=5)
     memo: str = Field(default="", max_length=c.MEMO_MAX)
+    name: str = Field(default="", max_length=40)
 
     @field_validator("scenario")
     @classmethod
