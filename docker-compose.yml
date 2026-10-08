@@ -10,6 +10,10 @@ services:
       retries: 5
     environment:
       - ALPHAVANTAGE_API_KEY=${ALPHAVANTAGE_API_KEY}
+      - FORECAST_STORAGE=${FORECAST_STORAGE:-github}
+      - FORECAST_GITHUB_TOKEN=${FORECAST_GITHUB_TOKEN:-}
+      - FORECAST_GITHUB_REPO=${FORECAST_GITHUB_REPO:-nfukuno/stock-app}
+      - FORECAST_GITHUB_BRANCH=${FORECAST_GITHUB_BRANCH:-main}
     volumes:
       - ./app/data/stocks.csv:/app/data/stocks.csv
       - ./app/templates:/app/app/templates

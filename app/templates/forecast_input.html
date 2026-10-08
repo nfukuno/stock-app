@@ -1,0 +1,71 @@
+{% extends "forecast_base.html" %}
+{% set nav = 'index' %}
+{% block head %}
+<style>
+  #chartwrap { position:relative; height:440px; touch-action:pan-y; }
+  #chart { position:absolute; inset:0; }
+  #overlay { position:absolute; inset:0; pointer-events:none; overflow:hidden; z-index:5; }
+  .handle { position:absolute; height:22px; min-width:64px; padding:0 8px; display:flex; align-items:center; justify-content:center;
+    border-radius:11px; font-size:12px; font-weight:700; color:#fff; pointer-events:auto; cursor:ns-resize; user-select:none;
+    touch-action:none; transform:translate(-50%,-50%); box-shadow:0 1px 4px rgba(0,0,0,.35); white-space:nowrap; }
+  .handle[data-key=open], .handle[data-key=close] { min-width:60px; }
+  .handle[data-key=open] { background:#6b7280; } .handle[data-key=close] { background:#374151; }
+  .handle[data-key=high] { background:var(--up); } .handle[data-key=low] { background:var(--down); }
+  .handle.dragging { outline:3px solid rgba(47,91,234,.45); }
+  .readonly .handle { cursor:default; opacity:.7; }
+  .panel { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; }
+  .panel label { display:block; font-size:12px; color:var(--muted); }
+  .panel input { width:100%; }
+  .panel .sub { font-size:11px; color:var(--muted); margin-top:2px; min-height:16px; }
+  .scn { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:6px; }
+  .scn label { display:flex; align-items:center; gap:6px; border:1px solid var(--line); border-radius:8px; padding:4px 8px; cursor:pointer; }
+  .scn input { margin:0; } .scn label.sel { border-color:var(--accent); background:#eef2ff; }
+  .scn svg { flex:none; }
+  .seg { display:flex; gap:6px; } .seg label { flex:1; text-align:center; border:1px solid var(--line); border-radius:8px; padding:6px 0; cursor:pointer; }
+  .seg input { display:none; } .seg label.sel { background:var(--accent); color:#fff; border-color:var(--accent); }
+  textarea { width:100%; min-height:64px; }
+  #banner { display:none; background:#fff1d6; border:1px solid #f0cf8a; border-radius:8px; padding:8px 12px; margin-bottom:10px; }
+  #toast { position:fixed; left:50%; bottom:20px; transform:translateX(-50%); background:#1f2430; color:#fff; padding:10px 18px; border-radius:8px; display:none; z-index:10; }
+  #toast.err { background:#b3261e; }
+  @media (max-width:480px) { #chartwrap { height:360px; } .panel { grid-template-columns:repeat(2,1fr); } main { padding:10px; } }
+</style>
+<script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+{% endblock %}
+{% block body %}
+<h1><span id="title">{{ symbol }} {{ name }}</span> <span class="muted" style="font-size:14px" id="target"></span></h1>
+<div id="banner"></div>
+<div class="card" id="chartcard">
+  <div id="chartwrap"><div id="chart"></div><div id="overlay"></div></div>
+  <p class="muted" style="margin:6px 0 0">O/H/L/C のハンドルを上下にドラッグして、右端の予想足を描いてください（数値欄とも連動）。MA5=橙 / MA25=紫</p>
+</div>
+<div class="card">
+  <h2>予想値</h2>
+  <div class="panel" id="panel">
+    {% for k, lab in [('open','始値 O'),('high','高値 H'),('low','安値 L'),('close','終値 C')] %}
+    <div><label for="in_{{ k }}">{{ lab }}</label><input type="number" step="0.1" id="in_{{ k }}" data-key="{{ k }}">
+      <div class="sub" id="sub_{{ k }}"></div></div>
+    {% endfor %}
+  </div>
+  <p class="muted" id="rangeinfo" style="margin:8px 0 0"></p>
+</div>
+<div class="card">
+  <h2>シナリオ <span class="muted" style="font-weight:400">（必須）</span></h2>
+  <div class="scn" id="scn">
+    {% for s in scenarios %}
+    <label title="{{ s.rule }}（日足だけでは値動きの順序が分からないため、自動判定は近似です）">
+      <input type="radio" name="scenario" value="{{ s.key }}"><span class="icon" data-key="{{ s.key }}"></span><span>{{ s.label }}</span></label>
+    {% endfor %}
+  </div>
+  <h2 style="margin-top:14px">自信度</h2>
+  <div class="seg" id="conf">
+    {% for i in range(1, 6) %}<label><input type="radio" name="confidence" value="{{ i }}">{{ '★' * i }}</label>{% endfor %}
+  </div>
+  <h2 style="margin-top:14px">一言メモ <span class="muted" style="font-weight:400" id="memocount">0/{{ memo_max }}</span></h2>
+  <textarea id="memo" maxlength="{{ memo_max }}" placeholder="例: 米株高と円安。寄り後の押し目を拾われる想定"></textarea>
+  <div style="margin-top:12px"><button id="save" type="button">保存</button>
+    <span class="muted" id="savedinfo" style="margin-left:10px"></span></div>
+</div>
+<div id="toast"></div>
+<script>window.FORECAST = { symbol: {{ symbol|tojson }}, memoMax: {{ memo_max }}, scenarios: {{ scenarios|tojson }} };</script>
+<script src="/static/js/forecast_input.js"></script>
+{% endblock %}

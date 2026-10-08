@@ -5,3 +5,8 @@
 # Pythonキャッシュ
 __pycache__/
 *.pyc
+
+# 仮想環境・テストキャッシュ
+.venv/
+venv/
+.pytest_cache/
