@@ -1,1 +1,62 @@
-{% extends "forecast_base.html" %}{% set nav = 'dashboard' %}{% block body %}<h1>成績ダッシュボード</h1>{% endblock %}
+{% extends "forecast_base.html" %}
+{% set nav = 'dashboard' %}
+{% block head %}
+<style>
+  .filters { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .seg2 button { background:#fff; color:var(--fg); border:1px solid var(--line); border-radius:0; padding:6px 12px; }
+  .seg2 button:first-child { border-radius:8px 0 0 8px; } .seg2 button:last-child { border-radius:0 8px 8px 0; }
+  .seg2 button.on { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; }
+  .kpi { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:10px 14px; }
+  .kpi .v { font-size:24px; font-weight:700; } .kpi .l { color:var(--muted); font-size:12px; }
+  .grid2 { display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:14px; }
+  .chartbox { position:relative; height:280px; } .chartbox.tall { height:320px; }
+  td.num, th.num { text-align:right; } .cm td { text-align:center; min-width:34px; font-size:12px; padding:4px; }
+  .cm th { font-size:10px; padding:4px 2px; text-align:center; min-width:56px; line-height:1.2; vertical-align:bottom; }
+  .cm td.diag { background:#dff5e8; font-weight:700; } .cm td.z { color:#ccc; }
+  .reviews { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:12px; }
+  .rcard { border:1px solid var(--line); border-radius:10px; padding:10px; background:#fff; }
+  .rcard img { width:100%; border-radius:6px; background:#f0f1f4; min-height:60px; }
+  .rcard .memo { background:#f6f7f9; border-radius:6px; padding:6px 8px; margin-top:6px; white-space:pre-wrap; word-break:break-all; }
+  .bd { font-size:12px; color:var(--muted); }
+  #empty { display:none; text-align:center; padding:30px; color:var(--muted); }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js"></script>
+{% endblock %}
+{% block body %}
+<h1>成績ダッシュボード</h1>
+<div class="card filters">
+  <span class="seg2" id="period">
+    <button data-last="20">直近20日</button><button data-last="60">直近60日</button><button data-last="" class="on">全期間</button>
+  </span>
+  <select id="symbol" aria-label="銘柄"><option value="">全銘柄</option>
+    {% for s in symbols %}<option value="{{ s.symbol }}">{{ s.symbol }} {{ s.name }}</option>{% endfor %}</select>
+  <label><input type="checkbox" id="late"> 遅延入力（9:00以降の新規）を含める</label>
+  <span class="muted" id="status"></span>
+</div>
+<div id="empty" class="card">表示できる採点結果がありません。予想を保存し、引け後の採点を待ってください。</div>
+<div id="content">
+  <div class="kpis" id="kpis" style="margin-bottom:14px"></div>
+  <div class="card"><h2>スコア推移</h2><div class="chartbox tall"><canvas id="c_trend"></canvas></div>
+    <p class="muted" style="margin:6px 0 0">点=日別スコア / 実線=10件移動平均 / 点線=横ばい予想(flat)の10件移動平均</p></div>
+  <div class="card"><h2>偏り分析</h2>
+    <div class="grid2"><div>
+      <table><tbody>
+        <tr><th>楽観/悲観バイアス</th><td id="b_opt"></td></tr>
+        <tr><th>値幅の見積もり</th><td id="b_rng"></td></tr></tbody></table>
+      <p class="muted" id="b_note"></p></div>
+      <div class="chartbox"><canvas id="c_scatter"></canvas></div></div></div>
+  <div class="grid2">
+    <div class="card"><h2>自信度別</h2><div class="chartbox"><canvas id="c_conf"></canvas></div><div id="t_conf"></div></div>
+    <div class="card"><h2>シナリオ別</h2><div id="t_scn" style="overflow-x:auto"></div></div>
+  </div>
+  <div class="card"><h2>シナリオ混同行列（行=予想 / 列=実際）</h2><div id="t_cm" style="overflow-x:auto"></div></div>
+  <div class="grid2">
+    <div class="card"><h2>銘柄別</h2><div id="t_sym"></div></div>
+    <div class="card"><h2>曜日別</h2><div id="t_wd"></div></div>
+  </div>
+  <div class="card"><h2>振り返り（直近10件）</h2><div class="reviews" id="reviews"></div></div>
+</div>
+<script>window.DASH = { scenarios: {{ scenarios|tojson }}, pagesUrl: {{ pages_url|tojson }} };</script>
+<script src="/static/js/forecast_dashboard.js"></script>
+{% endblock %}
