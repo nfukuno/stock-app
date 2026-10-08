@@ -1,0 +1,83 @@
+name: Forecast Score
+
+on:
+  workflow_dispatch:
+    inputs:
+      date:
+        description: "採点基準日 YYYY-MM-DD（空なら今日・JST）"
+        required: false
+      rescore:
+        description: "採点済みも含めて全件再採点する"
+        type: boolean
+        default: false
+  schedule:
+    - cron: '30 7 * * 1-5'   # JST 16:30
+    - cron: '0 11 * * 1-5'   # JST 20:00（データ遅延時の再試行）
+
+permissions:
+  contents: write
+
+concurrency: forecast-score
+
+jobs:
+  score:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install fonts and dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y fonts-noto-cjk
+          pip install -r requirements.txt
+
+      - name: Score predictions (no notify)
+        run: |
+          ARGS="--no-notify"
+          if [ -n "${{ github.event.inputs.date }}" ]; then ARGS="$ARGS --date ${{ github.event.inputs.date }}"; fi
+          if [ "${{ github.event.inputs.rescore }}" = "true" ]; then ARGS="$ARGS --rescore"; fi
+          python -m app.forecast.job $ARGS
+
+      - name: Commit and push results
+        id: push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add forecasts/ output/forecast/
+          if git diff --cached --quiet; then
+            echo "pushed=false" >> "$GITHUB_OUTPUT"
+            echo "No changes to commit"
+            exit 0
+          fi
+          git commit -m "Score forecasts for $(date -u +'%Y-%m-%d')"
+          for i in 1 2 3; do
+            git pull --rebase origin "${GITHUB_REF_NAME}" && git push && break
+            echo "push failed (attempt $i), retrying"; sleep 5
+          done
+          echo "pushed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for GitHub Pages
+        if: steps.push.outputs.pushed == 'true'
+        run: sleep 60
+
+      - name: Send LINE notification
+        if: steps.push.outputs.pushed == 'true'
+        run: python -m app.forecast.job --notify-only
+        env:
+          LINE_ACCESS_TOKEN: ${{ secrets.LINE_ACCESS_TOKEN }}
+          LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
+
+      - name: Clear notification queue
+        if: steps.push.outputs.pushed == 'true'
+        run: |
+          git add forecasts/
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "Clear forecast notification queue"
+          for i in 1 2 3; do
+            git pull --rebase origin "${GITHUB_REF_NAME}" && git push && break
+            sleep 5
+          done

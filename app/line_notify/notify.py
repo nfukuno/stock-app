@@ -32,3 +32,21 @@ def send_line_notification(message: str, image_url: str = None):
     )
 
     print(response.status_code, response.text)
+
+def send_line_messages(text: str, image_urls: list = None):
+    """テキスト1件 + 画像複数件（push は1リクエスト最大5メッセージ）。"""
+    load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"))
+    headers = {
+        "Authorization": f"Bearer {os.getenv('LINE_ACCESS_TOKEN')}",
+        "Content-Type": "application/json"
+    }
+    messages = [{"type": "text", "text": text}]
+    for url in (image_urls or [])[:4]:
+        messages.append({"type": "image", "originalContentUrl": url, "previewImageUrl": url})
+    response = requests.post(
+        "https://api.line.me/v2/bot/message/push",
+        headers=headers,
+        json={"to": os.getenv("LINE_USER_ID"), "messages": messages}
+    )
+    print(response.status_code, response.text)
+    return response.status_code
