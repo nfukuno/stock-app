@@ -27,6 +27,10 @@ class ForecastStore(ABC):
     def list_all(self) -> list[dict]: ...
 
     @abstractmethod
+    def list_symbols(self, target_date: str) -> list[str]:
+        """その対象日に予想が保存されている銘柄。"""
+
+    @abstractmethod
     def read_text(self, rel: str) -> str | None: ...
 
     @abstractmethod
@@ -52,6 +56,14 @@ class LocalStore(ForecastStore):
         if not self.root.exists():
             return []
         return [json.loads(p.read_text(encoding="utf-8")) for p in sorted(self.root.glob("*/*/*.json"))]
+
+    def list_symbols(self, target_date):
+        y, m, _ = target_date.split("-")
+        d = self.root / y / m
+        if not d.exists():
+            return []
+        pre = f"{target_date}_"
+        return sorted(p.stem[len(pre):] for p in d.glob(f"{pre}*.json"))
 
     def read_text(self, rel):
         p = self.root / rel
@@ -111,6 +123,17 @@ class GitHubStore(ForecastStore):
             body["sha"] = info["sha"]
         r = requests.put(self._url(rel), headers=self._headers(), json=body, timeout=30)
         r.raise_for_status()
+
+    def list_symbols(self, target_date):
+        y, m, _ = target_date.split("-")
+        r = requests.get(f"{self.API}/repos/{self.repo}/contents/{self.prefix}/{y}/{m}", headers=self._headers(),
+                         params={"ref": self.branch}, timeout=20)
+        if r.status_code == 404:
+            return []
+        r.raise_for_status()
+        pre = f"{target_date}_"
+        return sorted(f["name"][len(pre):-5] for f in r.json()
+                      if f["name"].startswith(pre) and f["name"].endswith(".json"))
 
     def get(self, target_date, symbol):
         text = self.read_text(rel_path(target_date, symbol))

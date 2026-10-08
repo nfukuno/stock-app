@@ -93,3 +93,37 @@ def test_pages(client):
 def test_results_empty(client):
     j = client.get("/api/forecast/results").json()
     assert j["records"] == [] and j["summary"]["n"] == 0
+
+
+def test_custom_name_and_watchlist(client, monkeypatch):
+    monkeypatch.setattr(market, "lookup_name", lambda s: None)
+    r = client.post("/api/forecast", json=body(symbol="9999", name="テスト商事"))
+    assert r.status_code == 200 and r.json()["name"] == "テスト商事"
+    # 名前が保存され、画面（候補）に出る
+    assert client.get("/api/forecast/candles/9999").json()["name"] == "テスト商事"
+    html = client.get("/forecast").text
+    assert "9999.T テスト商事" in html and "入力済み" in html
+    # 翌日（別の対象日）でも、銘柄リストに残っている
+    client.clock["now"] = jst(2026, 10, 30, 16, 0)
+    html = client.get("/forecast").text
+    assert "9999.T テスト商事" in html and "未入力" in html
+    # 名前を省略して再保存しても名前は維持される
+    client.clock["now"] = jst(2026, 10, 30, 8, 30)
+    r = client.post("/api/forecast", json=body(symbol="9999"))
+    assert r.json()["name"] == "テスト商事"
+
+
+def test_name_fallbacks(client, monkeypatch):
+    monkeypatch.setattr(market, "lookup_name", lambda s: "ACME CORP" if s == "1111.T" else None)
+    assert client.post("/api/forecast", json=body(symbol="1111")).json()["name"] == "ACME CORP"
+    assert client.post("/api/forecast", json=body(symbol="2222")).json()["name"] == "2222.T"
+    assert client.post("/api/forecast", json=body(symbol="5801")).json()["name"] == "古河電気工業"   # CSV
+
+
+def test_list_symbols_includes_saved_unlisted(client, monkeypatch):
+    monkeypatch.setattr(market, "lookup_name", lambda s: None)
+    from app.forecast.store import get_store
+    st = get_store()
+    st.put(make_pred(target="2026-10-30", symbol="4444.T", name="4444.T"))
+    assert st.list_symbols("2026-10-30") == ["4444.T"]
+    assert "4444.T" in client.get("/forecast").text

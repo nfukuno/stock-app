@@ -115,3 +115,22 @@ def snapshot_before(df: pd.DataFrame, target: date) -> dict | None:
         "prev_close": round(float(hist["close"].iloc[-1]), 2),
         "atr14": round(atr, 2) if atr is not None else None,
     }
+
+
+_names: dict[str, str] = {}
+
+
+def lookup_name(symbol: str) -> str | None:
+    """yfinance から銘柄名を取得（英語名のことが多い）。失敗時は None。"""
+    if symbol in _names:
+        return _names[symbol] or None
+    name = ""
+    try:
+        import yfinance as yf
+
+        info = yf.Ticker(symbol).info
+        name = (info.get("shortName") or info.get("longName") or "").strip()
+    except Exception:
+        pass
+    _names[symbol] = name
+    return name or None

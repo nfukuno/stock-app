@@ -34,6 +34,8 @@
 {% block body %}
 <h1><span id="title">{{ symbol }} {{ name }}</span> <span class="muted" style="font-size:14px" id="target"></span></h1>
 <div id="banner"></div>
+<div style="margin-bottom:10px"><label class="muted" for="name">銘柄名（任意・一覧に表示されます）</label>
+  <input id="name" maxlength="40" placeholder="例: 古河電気工業" style="margin-left:6px;width:240px"></div>
 <div class="card" id="chartcard">
   <div id="chartwrap"><div id="chart"></div><div id="overlay"></div></div>
   <p class="muted" style="margin:6px 0 0">O/H/L/C のハンドルを上下にドラッグして、右端の予想足を描いてください（数値欄とも連動）。MA5=橙 / MA25=紫</p>

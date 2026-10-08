@@ -164,7 +164,7 @@
   function setLocked(v, msg) {
     locked = v;
     $('chartwrap').classList.toggle('readonly', v);
-    document.querySelectorAll('#panel input, #scn input, #conf input, #memo, #save').forEach(function (e) { e.disabled = v; });
+    document.querySelectorAll('#panel input, #scn input, #conf input, #memo, #save, #name').forEach(function (e) { e.disabled = v; });
     var b = $('banner'); b.style.display = v ? 'block' : 'none'; if (v) b.textContent = msg;
   }
   function fillForm(p) {
@@ -186,7 +186,7 @@
       var res = await fetch('/api/forecast', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ symbol: data.symbol, target_date: data.target_date, pred: pred,
-          scenario: sc.value, confidence: parseInt(cf.value, 10), memo: $('memo').value })
+          scenario: sc.value, confidence: parseInt(cf.value, 10), memo: $('memo').value, name: $('name').value.trim() })
       });
       var body = await res.json().catch(function () { return {}; });
       if (!res.ok) {
@@ -215,7 +215,8 @@
       $('save').disabled = true; return;
     }
     data = await res.json();
-    $('title').textContent = data.symbol + ' ' + data.name;
+    $('title').textContent = data.symbol + (data.name && data.name !== data.symbol ? ' ' + data.name : '');
+    if (data.name && data.name !== data.symbol) $('name').value = data.name;
     $('target').textContent = '予想対象日: ' + data.target_date;
     var pc = data.prev_close, a = data.atr14 || pc * 0.01;
     var ex = data.existing;
