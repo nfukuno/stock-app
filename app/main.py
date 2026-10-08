@@ -1,4 +1,5 @@
 import csv
+from pathlib import Path
 from datetime import datetime, timezone, timedelta
 import yfinance as yf
 from fastapi import FastAPI, Request
@@ -9,14 +10,16 @@ from fastapi.staticfiles import StaticFiles
 from app.forecast.config import STATIC_DIR
 from app.forecast.routes import router as forecast_router
 
+BASE_DIR = Path(__file__).resolve().parent
+
 app = FastAPI(title="Stock Drawdown Checker")
-templates = Jinja2Templates(directory="app/templates")
+templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 app.include_router(forecast_router)
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 def load_stock_list():
     stocks = []
-    with open("data/stocks.csv", newline="", encoding="utf-8") as f:
+    with open(BASE_DIR / "data" / "stocks.csv", newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         for row in reader:
             stocks.append({
@@ -115,4 +118,4 @@ def home(request: Request):
                 "highlight_all": "",
             })
 
-    return templates.TemplateResponse("index.html", {"request": request, "results": results, "exec_time": jst_str})
+    return templates.TemplateResponse(request, "index.html", {"results": results, "exec_time": jst_str})
