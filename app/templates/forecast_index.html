@@ -1,0 +1,53 @@
+{% extends "forecast_base.html" %}
+{% set nav = 'index' %}
+{% block body %}
+<h1>日足予想</h1>
+<div class="card">
+  <h2>次の取引日: {{ target_date }}</h2>
+  <p class="muted">対象日の {{ locked_at }} 以降は、保存済みの予想は編集できません（新規は「遅延」扱いで成績集計から除外）。</p>
+  {% if error %}<p class="neg">{{ error }}</p>{% endif %}
+  <form id="goform" style="margin:8px 0 14px">
+    <input id="code" placeholder="銘柄コード（例: 7203 / 285A）" size="26" aria-label="銘柄コード">
+    <button type="submit">予想を入力</button>
+  </form>
+  <table>
+    <thead><tr><th>銘柄</th><th>状態</th><th>予想（始/高/安/終）</th><th>シナリオ</th><th>自信度</th></tr></thead>
+    <tbody>
+    {% for it in items %}
+      <tr>
+        <td><a href="/forecast/{{ it.symbol }}">{{ it.symbol }} {{ it.name }}</a></td>
+        {% if it.saved %}
+        <td><span class="badge ok">入力済み</span>{% if it.saved.late %} <span class="badge late">遅延</span>{% endif %}</td>
+        <td>{{ it.saved.pred.open }} / {{ it.saved.pred.high }} / {{ it.saved.pred.low }} / {{ it.saved.pred.close }}</td>
+        <td>{{ labels.get(it.saved.scenario, it.saved.scenario) }}</td><td>{{ it.saved.confidence }}</td>
+        {% else %}
+        <td><span class="badge pending">未入力</span></td><td>-</td><td>-</td><td>-</td>
+        {% endif %}
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+<div class="card">
+  <h2>直近の採点結果</h2>
+  {% if recent %}
+  <table>
+    <thead><tr><th>対象日</th><th>銘柄</th><th>スコア</th><th>横ばい比</th><th>シナリオ</th></tr></thead>
+    <tbody>
+    {% for r in recent %}
+      <tr><td>{{ r.target_date }}</td><td>{{ r.symbol }} {{ r.name }}</td><td>{{ r.total }}</td>
+        <td class="{{ 'pos' if r.skill and r.skill > 0 else 'neg' }}">{{ '%+.1f' % r.skill if r.skill is not none else '-' }}</td>
+        <td>{{ labels.get(r.scenario, r.scenario) }}{% if r.scenario_hit == true %} ○{% elif r.scenario_hit == false %} ✕{% endif %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<p class="muted">まだ採点結果がありません。</p>{% endif %}
+</div>
+<script>
+  document.getElementById('goform').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var v = document.getElementById('code').value.trim();
+    if (v) location.href = '/forecast/' + encodeURIComponent(v.toUpperCase());
+  });
+</script>
+{% endblock %}
