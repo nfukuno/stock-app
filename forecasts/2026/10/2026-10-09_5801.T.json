@@ -1,0 +1,31 @@
+{
+  "id": "2026-10-09_5801.T",
+  "schema_version": 1,
+  "symbol": "5801.T",
+  "name": "5801.T",
+  "target_date": "2026-10-09",
+  "created_at": "2026-10-08T17:40:26+09:00",
+  "updated_at": "2026-10-08T17:40:26+09:00",
+  "late": false,
+  "snapshot": {
+    "prev_date": "2026-10-08",
+    "prev_close": 4220.0,
+    "atr14": 228.14
+  },
+  "pred": {
+    "open": 4114.2,
+    "high": 4160.2,
+    "low": 3887.4,
+    "close": 3947.9
+  },
+  "scenario": "gap_up_fade",
+  "confidence": 2,
+  "memo": "",
+  "status": "pending",
+  "actual": null,
+  "actual_scenario": null,
+  "score": null,
+  "baselines": null,
+  "scored_at": null,
+  "scoring_version": null
+}
