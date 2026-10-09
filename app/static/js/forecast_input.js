@@ -6,6 +6,7 @@
   var LABEL = { open: 'O', high: 'H', low: 'L', close: 'C' };
   var HANDLE_DX = { open: -34, close: 34, high: 0, low: 0 };   // 近接時に重ならないよう横/縦にずらす
   var HANDLE_DY = { open: 0, close: 0, high: -13, low: 13 };
+  var SCN = {}; (F.scenarios || []).forEach(function (x) { SCN[x.key] = x.label; });
   var UP = '#d6403a', DOWN = '#1f7ae0';
   var $ = function (id) { return document.getElementById(id); };
 
@@ -180,8 +181,9 @@
     if (!sc) return toast('シナリオを選んでください', true);
     if (!cf) return toast('自信度を選んでください', true);
     if (data.past_lock) {
-      var warn = '対象日の 9:00 を過ぎています。この予想は「場中予想」として保存され、採点・LINE 通知・成績集計の対象外になります。';
-      if (data.existing && !data.existing.late) warn += '\n（9:00 前に保存した予想も、これ以降は採点されなくなります）';
+      var ex = data.existing, warn;
+      if (ex && !ex.late) warn = '対象日の 9:00 を過ぎています。この編集は「場中の修正」として保存され、採点には影響しません。\n採点には 9:00 前に保存した予想が使われます。';
+      else warn = '対象日の 9:00 を過ぎています。この予想は「場中予想」として保存され、採点・LINE 通知・成績集計の対象外になります。';
       if (!confirm(warn + '\n保存しますか？')) return;
     }
     $('save').disabled = true;
@@ -198,13 +200,29 @@
         if (res.status === 409) setLocked(true, '採点済みのため編集できません');
         return;
       }
-      data.existing = body;
-      $('savedinfo').textContent = '保存しました ' + body.updated_at.replace('T', ' ').slice(0, 16) + (body.late ? '（場中・採点なし）' : '');
+      data.existing = body; banner();
+      $('savedinfo').textContent = '保存しました ' + body.updated_at.replace('T', ' ').slice(0, 16) + (body.late ? '（場中・採点なし）' : (body.frozen ? '（場中の修正・採点は9:00前の予想）' : ''));
       toast('保存しました');
     } catch (e) {
       toast('通信エラー: ' + e, true);
     } finally {
       if (!locked) $('save').disabled = false;
+    }
+  }
+
+  function banner() {
+    var b = $('banner'), ex = data.existing;
+    if (!data.past_lock) { b.style.display = 'none'; return; }
+    b.style.display = 'block';
+    var fz = ex && ex.frozen;
+    if (fz) {
+      b.innerHTML = '9:00 を過ぎています。<b>採点に使われるのは 9:00 前に保存した予想</b>です（場中の編集は採点に影響しません）。<br>' +
+        '採点用: O ' + fmt(fz.pred.open) + ' / H ' + fmt(fz.pred.high) + ' / L ' + fmt(fz.pred.low) + ' / C ' + fmt(fz.pred.close) +
+        '（' + (SCN[fz.scenario] || fz.scenario) + '・自信' + fz.confidence + '） ' + String(fz.saved_at).replace('T', ' ').slice(0, 16) + ' 保存';
+    } else if (ex && !ex.late) {
+      b.textContent = '9:00 を過ぎています。保存済みの予想（9:00 前）が採点に使われます。ここで編集しても採点には影響せず、場中の修正として別に保存されます。';
+    } else {
+      b.textContent = '9:00 を過ぎています。保存は「場中予想」扱いで、採点・成績集計の対象外です（場中に日足を考えるための予想として使えます）。';
     }
   }
 
@@ -225,14 +243,14 @@
     pred = ex ? { open: ex.pred.open, high: ex.pred.high, low: ex.pred.low, close: ex.pred.close }
               : { open: pc, close: pc, high: r1(pc + a / 2), low: r1(pc - a / 2) };   // 初期値 = flat ベースライン
     buildChart(); makeHandles();
-    if (ex) { fillForm(ex); $('savedinfo').textContent = '保存済み ' + ex.updated_at.replace('T', ' ').slice(0, 16) + (ex.late ? '（場中・採点なし）' : ''); }
+    if (ex) { fillForm(ex); $('savedinfo').textContent = '保存済み ' + ex.updated_at.replace('T', ' ').slice(0, 16) + (ex.late ? '（場中・採点なし）' : (ex.frozen ? '（場中の修正・採点は9:00前の予想）' : '')); }
     KEYS.forEach(function (k) { $('in_' + k).addEventListener('change', function (e) { var v = parseFloat(e.target.value); if (isFinite(v)) setPrice(k, v); else render(); }); });
     $('memo').addEventListener('input', function () { $('memocount').textContent = $('memo').value.length + '/' + F.memoMax; });
     document.querySelectorAll('#scn input, #conf input').forEach(function (i) { i.addEventListener('change', syncSelected); });
     $('save').addEventListener('click', save);
     render();
     if (data.locked) setLocked(true, '採点済みのため編集できません');
-    else if (data.past_lock) { $('banner').style.display = 'block'; $('banner').textContent = '9:00 を過ぎています。保存は「場中予想」扱いで、採点・成績集計の対象外です（場中に日足を考えるための予想として使えます）。'; }
+    else banner();
     requestAnimationFrame(loop);
     window.__fc = { get pred() { return pred; }, get data() { return data; } };
   }

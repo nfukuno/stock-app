@@ -182,12 +182,19 @@ def api_save(body: ForecastIn):
     watch = load_watchlist(store)
     name = resolve_name(sym, store, body.name or ((existing or {}).get("name") if (existing or {}).get("name") != sym else ""), watch)
     ts = now.isoformat(timespec="seconds")
+    late = bool(existing and existing.get("late"))
+    frozen = (existing or {}).get("frozen")
+    if existing is None:
+        late = past_lock                    # 9:00 以降に初めて保存 → 採点対象の予想なし（場中予想）
+    elif past_lock and not late and frozen is None:
+        # 9:00 前に保存済み → その内容を採点用に固定し、以降の編集は場中の修正として別に持つ
+        frozen = {k: existing[k] for k in ("pred", "scenario", "confidence", "memo")}
+        frozen["saved_at"] = existing["updated_at"]
     pred = {
         "id": prediction_id(body.target_date, sym), "schema_version": 1, "symbol": sym,
         "name": name, "target_date": body.target_date,
         "created_at": existing["created_at"] if existing else ts, "updated_at": ts,
-        # 9:00 以降の保存は「場中予想」（採点・集計の対象外）。一度 late になったら戻さない
-        "late": bool(existing and existing["late"]) or past_lock,
+        "late": late, "frozen": frozen, "edited_after_lock": frozen is not None,
         "snapshot": snap, "pred": body.pred.rounded(), "scenario": body.scenario,
         "confidence": body.confidence, "memo": body.memo, "status": "pending",
         "actual": None, "actual_scenario": None, "score": None, "baselines": None,
