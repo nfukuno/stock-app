@@ -61,20 +61,30 @@ def test_wrong_target_date(client):
     assert client.post("/api/forecast", json=body(target="2026-11-02")).status_code == 422
 
 
-def test_lock_after_9(client):
-    assert client.post("/api/forecast", json=body()).status_code == 200
+def test_edit_after_9_becomes_intraday(client):
+    assert client.post("/api/forecast", json=body()).json()["late"] is False
     client.clock["now"] = jst(2026, 10, 30, 9, 0)
-    assert client.post("/api/forecast", json=body(memo="x")).status_code == 409
     info = client.get("/api/forecast/candles/7203").json()
-    assert info["locked"] is True and info["existing"]["memo"] == "メモ"
+    assert info["locked"] is False and info["past_lock"] is True
+    r = client.post("/api/forecast", json=body(memo="場中に更新"))
+    assert r.status_code == 200 and r.json()["late"] is True and r.json()["memo"] == "場中に更新"
+    # 一度 late になったら、9:00 前の時刻に戻っても late のまま
+    client.clock["now"] = jst(2026, 10, 30, 8, 0)
+    assert client.post("/api/forecast", json=body(memo="x")).json()["late"] is True
+
+
+def test_scored_is_locked(client):
+    from app.forecast.store import get_store
+    get_store().put(make_pred(target="2026-10-30", symbol="7203.T", status="scored"))
+    assert client.post("/api/forecast", json=body()).status_code == 409
+    assert client.get("/api/forecast/candles/7203").json()["locked"] is True
 
 
 def test_late_new_after_9(client):
     client.clock["now"] = jst(2026, 10, 30, 10, 30)
     r = client.post("/api/forecast", json=body())
     assert r.status_code == 200 and r.json()["late"] is True
-    # 遅延で保存したものも次回以降は編集不可
-    assert client.post("/api/forecast", json=body(memo="x")).status_code == 409
+    assert client.post("/api/forecast", json=body(memo="何度でも編集できる")).status_code == 200
     assert client.get("/api/forecast/candles/7203").json()["past_lock"] is True
 
 

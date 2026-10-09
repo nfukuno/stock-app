@@ -31,7 +31,7 @@
   </span>
   <select id="symbol" aria-label="銘柄"><option value="">全銘柄</option>
     {% for s in symbols %}<option value="{{ s.symbol }}">{{ s.symbol }} {{ s.name }}</option>{% endfor %}</select>
-  <label><input type="checkbox" id="late"> 遅延入力（9:00以降の新規）を含める</label>
+  <label><input type="checkbox" id="late"> 場中予想（9:00以降に保存）を含める</label>
   <span class="muted" id="status"></span>
 </div>
 <div id="empty" class="card">表示できる採点結果がありません。予想を保存し、引け後の採点を待ってください。</div>

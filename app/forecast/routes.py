@@ -136,7 +136,7 @@ def api_candles(symbol: str, days: int = 120):
         name = resolve_name(sym, get_store())
     return {"symbol": sym, "name": name, "bars": bars, "prev_close": snap["prev_close"],
             "prev_date": snap["prev_date"], "atr14": snap["atr14"], "target_date": target.isoformat(),
-            "locked": existing is not None and (locked or existing.get("status") != "pending"),
+            "locked": existing is not None and existing.get("status") != "pending",
             "past_lock": locked, "existing": existing}
 
 
@@ -170,8 +170,8 @@ def api_save(body: ForecastIn):
     store = get_store()
     existing = store.get(body.target_date, sym)
     past_lock = now >= market.lock_time(target)
-    if existing is not None and (past_lock or existing.get("status") != "pending"):
-        raise HTTPException(409, "9:00 を過ぎた（または採点済みの）予想は編集できません")
+    if existing is not None and existing.get("status") != "pending":
+        raise HTTPException(409, "採点済みの予想は編集できません")
     try:
         df = market.fetch_daily(sym, 60)
     except Exception as e:
@@ -186,7 +186,8 @@ def api_save(body: ForecastIn):
         "id": prediction_id(body.target_date, sym), "schema_version": 1, "symbol": sym,
         "name": name, "target_date": body.target_date,
         "created_at": existing["created_at"] if existing else ts, "updated_at": ts,
-        "late": bool(existing["late"]) if existing else past_lock,
+        # 9:00 以降の保存は「場中予想」（採点・集計の対象外）。一度 late になったら戻さない
+        "late": bool(existing and existing["late"]) or past_lock,
         "snapshot": snap, "pred": body.pred.rounded(), "scenario": body.scenario,
         "confidence": body.confidence, "memo": body.memo, "status": "pending",
         "actual": None, "actual_scenario": None, "score": None, "baselines": None,
