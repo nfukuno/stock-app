@@ -24,6 +24,14 @@ def score_prediction(p: dict, df, now: datetime) -> tuple[str, dict | None]:
     target = date.fromisoformat(p["target_date"])
     if not is_final(target, now):
         return "wait", None
+    if p.get("late"):      # 場中予想（9:00 以降に初めて保存）は採点しない
+        return "void", {**p, "status": "void", "void_reason": "intraday_unscored",
+                        "scored_at": now.isoformat(timespec="seconds")}
+    fz = p.get("frozen")
+    if fz:                 # 9:00 以降に編集された予想は、9:00 前に保存した内容で採点（場中の修正は参考情報として保持）
+        p = {**p, **{k: fz[k] for k in ("pred", "scenario", "confidence", "memo")},
+             "intraday": {k: p[k] for k in ("pred", "scenario", "confidence", "memo")} | {"edited_at": p["updated_at"]}}
+        p.pop("frozen")
     hist = df[[d < target for d in df.index]]
     has_target = target in df.index
     later = any(d > target for d in df.index)

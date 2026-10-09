@@ -136,7 +136,7 @@ def api_candles(symbol: str, days: int = 120):
         name = resolve_name(sym, get_store())
     return {"symbol": sym, "name": name, "bars": bars, "prev_close": snap["prev_close"],
             "prev_date": snap["prev_date"], "atr14": snap["atr14"], "target_date": target.isoformat(),
-            "locked": existing is not None and (locked or existing.get("status") != "pending"),
+            "locked": existing is not None and existing.get("status") != "pending",
             "past_lock": locked, "existing": existing}
 
 
@@ -170,8 +170,8 @@ def api_save(body: ForecastIn):
     store = get_store()
     existing = store.get(body.target_date, sym)
     past_lock = now >= market.lock_time(target)
-    if existing is not None and (past_lock or existing.get("status") != "pending"):
-        raise HTTPException(409, "9:00 を過ぎた（または採点済みの）予想は編集できません")
+    if existing is not None and existing.get("status") != "pending":
+        raise HTTPException(409, "採点済みの予想は編集できません")
     try:
         df = market.fetch_daily(sym, 60)
     except Exception as e:
@@ -182,11 +182,19 @@ def api_save(body: ForecastIn):
     watch = load_watchlist(store)
     name = resolve_name(sym, store, body.name or ((existing or {}).get("name") if (existing or {}).get("name") != sym else ""), watch)
     ts = now.isoformat(timespec="seconds")
+    late = bool(existing and existing.get("late"))
+    frozen = (existing or {}).get("frozen")
+    if existing is None:
+        late = past_lock                    # 9:00 以降に初めて保存 → 採点対象の予想なし（場中予想）
+    elif past_lock and not late and frozen is None:
+        # 9:00 前に保存済み → その内容を採点用に固定し、以降の編集は場中の修正として別に持つ
+        frozen = {k: existing[k] for k in ("pred", "scenario", "confidence", "memo")}
+        frozen["saved_at"] = existing["updated_at"]
     pred = {
         "id": prediction_id(body.target_date, sym), "schema_version": 1, "symbol": sym,
         "name": name, "target_date": body.target_date,
         "created_at": existing["created_at"] if existing else ts, "updated_at": ts,
-        "late": bool(existing["late"]) if existing else past_lock,
+        "late": late, "frozen": frozen, "edited_after_lock": frozen is not None,
         "snapshot": snap, "pred": body.pred.rounded(), "scenario": body.scenario,
         "confidence": body.confidence, "memo": body.memo, "status": "pending",
         "actual": None, "actual_scenario": None, "score": None, "baselines": None,

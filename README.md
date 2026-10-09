@@ -40,7 +40,7 @@ pip install -r requirements.txt
 
 ### 仕組み
 - 予想は `forecasts/YYYY/MM/{対象日}_{銘柄}.json`（1銘柄1日1件）。ローカルの FastAPI から **GitHub Contents API** でリポジトリに保存します（`FORECAST_STORAGE=github`）。
-- 対象日の **9:00 JST 以降は保存済みの予想を編集できません**（API は 409）。9:00 以降の新規保存は `late` 扱いで、ダッシュボード集計から既定で除外されます。
+- 対象日の **9:00 JST より前に保存した予想が、引け後に採点されます**。9:00 以降も編集はできますが、採点は 9:00 前の内容のままです（`frozen` として固定され、場中の編集は通常欄と `intraday` に別保持）。9:00 以降に初めて保存した予想は `late`（場中予想）で、採点・LINE 通知・成績集計の対象外です（場中に日足を考えてからエントリーする用途）。採点済みの予想は編集できません（API は 409）。
 - GitHub Actions `forecast_score`（平日 JST 16:30、再試行 20:00）が `python -m app.forecast.job` を実行して採点し、`forecasts/results.csv`・比較画像 `output/forecast/*.png` を生成して push、**push の後に** LINE へ通知します。
 - 採点式（方向・終値・始値・値幅IoU・実体IoU・ヒゲ）と重みは `app/forecast/config.py`。式を変えるときは `SCORING_VERSION` を上げ、`--rescore` で全件再採点します。ベースラインは横ばい予想(flat)と前日足コピー(prev_copy)で、スキル = 総合 − flat です。
 - ジョブ CLI: `python -m app.forecast.job [--date YYYY-MM-DD] [--dry-run] [--no-notify] [--rescore] [--notify-only]`

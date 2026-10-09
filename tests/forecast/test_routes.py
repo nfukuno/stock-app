@@ -61,20 +61,36 @@ def test_wrong_target_date(client):
     assert client.post("/api/forecast", json=body(target="2026-11-02")).status_code == 422
 
 
-def test_lock_after_9(client):
-    assert client.post("/api/forecast", json=body()).status_code == 200
+def test_edit_after_9_keeps_pre9_for_scoring(client):
+    first = client.post("/api/forecast", json=body()).json()
+    assert first["late"] is False and first["frozen"] is None
     client.clock["now"] = jst(2026, 10, 30, 9, 0)
-    assert client.post("/api/forecast", json=body(memo="x")).status_code == 409
     info = client.get("/api/forecast/candles/7203").json()
-    assert info["locked"] is True and info["existing"]["memo"] == "メモ"
+    assert info["locked"] is False and info["past_lock"] is True
+    edit = body(memo="場中に更新", scenario="range", confidence=5, pred={"open": 99, "high": 120, "low": 95, "close": 118})
+    r = client.post("/api/forecast", json=edit).json()
+    assert r["late"] is False and r["edited_after_lock"] is True
+    assert r["pred"]["close"] == 118 and r["memo"] == "場中に更新"                      # 現在の（場中の）内容
+    assert r["frozen"]["pred"] == first["pred"] and r["frozen"]["memo"] == "メモ"        # 採点に使う 9:00 前の内容
+    assert r["frozen"]["scenario"] == "up_trend" and r["frozen"]["confidence"] == 3
+    # 再編集しても frozen は最初の 9:00 前の内容のまま
+    client.clock["now"] = jst(2026, 10, 30, 11, 0)
+    r2 = client.post("/api/forecast", json=body(memo="さらに更新", pred={"open": 100, "high": 130, "low": 90, "close": 125})).json()
+    assert r2["frozen"] == r["frozen"] and r2["pred"]["close"] == 125
+
+
+def test_scored_is_locked(client):
+    from app.forecast.store import get_store
+    get_store().put(make_pred(target="2026-10-30", symbol="7203.T", status="scored"))
+    assert client.post("/api/forecast", json=body()).status_code == 409
+    assert client.get("/api/forecast/candles/7203").json()["locked"] is True
 
 
 def test_late_new_after_9(client):
     client.clock["now"] = jst(2026, 10, 30, 10, 30)
     r = client.post("/api/forecast", json=body())
     assert r.status_code == 200 and r.json()["late"] is True
-    # 遅延で保存したものも次回以降は編集不可
-    assert client.post("/api/forecast", json=body(memo="x")).status_code == 409
+    assert client.post("/api/forecast", json=body(memo="何度でも編集できる")).status_code == 200
     assert client.get("/api/forecast/candles/7203").json()["past_lock"] is True
 
 

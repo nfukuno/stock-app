@@ -74,14 +74,15 @@ def test_run_end_to_end(tmp_path, monkeypatch):
     df = frame(base_rows() + [(target, 115, 121, 114, 120)])
     monkeypatch.setattr(job, "render", lambda *a, **k: None)
     scored = job.run(Args(), store=st, fetch=lambda s: df, now=jst(2026, 9, 24, 17, 0))
-    assert len(scored) == 2
+    assert len(scored) == 1                              # late(場中予想) は採点しない
+    assert st.get(target, "6758.T")["status"] == "void"
     assert st.get(target, "7203.T")["status"] == "scored"
     csv_lines = st.read_text("results.csv").strip().split("\n")
-    assert len(csv_lines) == 3
-    assert sorted(json.loads(st.read_text(".pending_notify.json"))) == ["2026-09-24_6758.T", "2026-09-24_7203.T"]
+    assert len(csv_lines) == 2
+    assert json.loads(st.read_text(".pending_notify.json")) == ["2026-09-24_7203.T"]
     sent = []
     n = job.notify_pending(st, sender=lambda preds, avg: sent.append((preds, avg)))
-    assert n == 2 and st.read_text(".pending_notify.json") == "[]"
+    assert n == 1 and st.read_text(".pending_notify.json") == "[]"
     # 2 回目は何もしない
     assert job.run(Args(), store=st, fetch=lambda s: df, now=jst(2026, 9, 24, 17, 0)) == []
 
@@ -106,3 +107,37 @@ def test_message():
 def test_recent_skill_avg():
     ps = [make_pred(target=f"2026-09-{d:02d}", status="scored", skill=float(d)) for d in range(1, 13)]
     assert job.recent_skill_avg(ps) == pytest.approx(sum(range(3, 13)) / 10, abs=0.05)
+
+
+def test_intraday_prediction_is_not_scored(tmp_path, monkeypatch):
+    target = "2026-09-24"
+    st = LocalStore(tmp_path)
+    st.put(make_pred(target=target, late=True))
+    df = frame(base_rows() + [(target, 115, 121, 114, 120)])
+    monkeypatch.setattr(job, "render", lambda *a, **k: (_ for _ in ()).throw(AssertionError("画像は作らない")))
+    # 引け前は触らない（まだ編集できる）
+    assert job.run(Args(), store=st, fetch=lambda s: df, now=jst(2026, 9, 24, 12, 0)) == []
+    assert st.get(target, "7203.T")["status"] == "pending"
+    # 引け後は採点せず void にする（通知・集計の対象外）
+    assert job.run(Args(), store=st, fetch=lambda s: df, now=jst(2026, 9, 24, 17, 0)) == []
+    p = st.get(target, "7203.T")
+    assert p["status"] == "void" and p["void_reason"] == "intraday_unscored" and p["score"] is None
+    assert st.read_text(".pending_notify.json") in (None, "[]")
+
+
+def test_scores_pre9_content_when_edited_after_9():
+    target = "2026-09-24"
+    df = frame(base_rows() + [(target, 115, 120, 114, 119)])
+    good = {"open": 115.0, "high": 120.0, "low": 114.0, "close": 119.0}      # 9:00 前の予想（実際と一致）
+    edited = {"open": 110.0, "high": 112.0, "low": 108.0, "close": 109.0}    # 場中に大きく変えた
+    p = make_pred(target=target, pred=edited, scenario="down_trend", confidence=5, memo="場中",
+                  frozen={"pred": good, "scenario": "up_trend", "confidence": 2, "memo": "寄り前",
+                          "saved_at": "2026-09-24T08:00:00+09:00"}, edited_after_lock=True)
+    out, new = job.score_prediction(p, df, jst(2026, 9, 24, 17, 0))
+    assert out == "scored" and new["score"]["total"] == 100.0                  # 9:00 前の内容で採点
+    assert new["pred"] == good and new["scenario"] == "up_trend" and new["confidence"] == 2 and new["memo"] == "寄り前"
+    assert new["intraday"]["pred"] == edited and new["intraday"]["scenario"] == "down_trend"
+    assert "frozen" not in new
+    # 場中の内容だけで採点した場合との差（＝影響していないことの確認）
+    _, alt = job.score_prediction(make_pred(target=target, pred=edited), df, jst(2026, 9, 24, 17, 0))
+    assert alt["score"]["total"] < 100

@@ -4,7 +4,7 @@
 <h1>日足予想</h1>
 <div class="card">
   <h2>次の取引日: {{ target_date }}</h2>
-  <p class="muted">対象日の {{ locked_at }} 以降は、保存済みの予想は編集できません（新規は「遅延」扱いで成績集計から除外）。</p>
+  <p class="muted">対象日の {{ locked_at }} 前に保存した予想だけが引け後に採点されます。{{ locked_at }} 以降も編集はできますが、採点は 9:00 前に保存した内容のままです（編集は場中の修正として別に保持）。{{ locked_at }} 以降に初めて保存した予想は「場中予想」で、採点の対象外です。</p>
   {% if error %}<p class="neg">{{ error }}</p>{% endif %}
   <form id="goform" style="margin:8px 0 14px">
     <input id="code" placeholder="銘柄コード（例: 7203 / 285A）" size="26" aria-label="銘柄コード">
@@ -17,7 +17,7 @@
       <tr>
         <td><a href="/forecast/{{ it.symbol }}">{{ it.symbol }} {{ it.name }}</a></td>
         {% if it.saved %}
-        <td><span class="badge ok">入力済み</span>{% if it.saved.late %} <span class="badge late">遅延</span>{% endif %}</td>
+        <td><span class="badge ok">入力済み</span>{% if it.saved.late %} <span class="badge late">場中・採点なし</span>{% elif it.saved.frozen %} <span class="badge late">場中修正あり・採点は9:00前の予想</span>{% endif %}</td>
         <td>{{ it.saved.pred.open }} / {{ it.saved.pred.high }} / {{ it.saved.pred.low }} / {{ it.saved.pred.close }}</td>
         <td>{{ labels.get(it.saved.scenario, it.saved.scenario) }}</td><td>{{ it.saved.confidence }}</td>
         {% else %}
