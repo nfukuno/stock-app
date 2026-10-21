@@ -96,3 +96,13 @@ def test_reset_keeps_old_account(client):
     assert r.status_code == 200 and r.json()["initial_cash"] == 3_000_000 and r.json()["positions"] == []
     assert r.json()["account_id"] != old and (client.root / "accounts" / f"{old}.json").exists()
     assert client.post("/api/trade/reset", json={"initial_cash": 1000}).status_code == 422
+
+
+def test_save_failure_is_502(client, monkeypatch):
+    from app.trade import store as tstore
+
+    def boom(*a, **k):
+        raise RuntimeError("403 Forbidden")
+    monkeypatch.setattr(tstore, "save", boom)
+    r = client.get("/api/trade/account")
+    assert r.status_code == 502 and "保存に失敗" in r.json()["detail"]

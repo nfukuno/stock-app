@@ -35,7 +35,13 @@
       }).join('') : '<tr><td colspan="5" class="muted">-</td></tr>') + '</tbody></table></div>';
   }
 
-  fetch('/api/trade/trades').then(function (r) { return r.json(); }).then(function (j) {
+  fetch('/api/trade/trades').then(function (r) {
+    return r.text().then(function (t) {
+      var j; try { j = JSON.parse(t); } catch (e) { throw new Error(t || r.statusText); }
+      if (!r.ok) throw new Error(j.detail || r.statusText);
+      return j;
+    });
+  }).then(function (j) {
     var s = j.stats;
     $('acct').textContent = '口座 ' + j.account_id + '（初期保証金 ' + yen(j.initial_cash) + ' 円）';
     var k = [

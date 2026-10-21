@@ -44,6 +44,15 @@ def _prices(acct: dict, extra: str | None = None) -> dict:
     return {s: last_price(s) for s in syms}
 
 
+def _save(store, acct: dict, message: str, make_current: bool = False) -> None:
+    try:
+        tstore.save(store, acct, message, make_current)
+    except Exception as e:
+        hint = "（.env の FORECAST_GITHUB_TOKEN と権限 Contents: Read and write を確認してください）" \
+            if config.storage_mode() == "github" else ""
+        raise HTTPException(502, f"口座の保存に失敗しました: {e}{hint}")
+
+
 def _load(store) -> dict:
     """現在の口座を読み、強制返済を反映する（反映があれば保存）。口座がなければ作る。"""
     now = market.now_jst()
@@ -53,10 +62,10 @@ def _load(store) -> dict:
         raise HTTPException(502, f"口座の読み込みに失敗しました: {e}")
     if acct is None:
         acct = engine.new_account(now)
-        tstore.save(store, acct, f"open account {acct['id']}", make_current=True)
+        _save(store, acct, f"open account {acct['id']}", make_current=True)
     forced = engine.apply_forced(acct, now, close_price_on)
     if forced:
-        tstore.save(store, acct, f"forced close {', '.join(t['id'] for t in forced)}")
+        _save(store, acct, f"forced close {', '.join(t['id'] for t in forced)}")
     return acct
 
 
@@ -120,7 +129,7 @@ def api_open(body: OpenIn):
         raise _err(e)
     engine.apply_forced(acct, now, close_price_on)        # 過去日のいちにち信用を入力した場合など
     side = "買" if pos["side"] == "long" else "売"
-    tstore.save(store, acct, f"open {pos['id']} {sym} {side} {pos['qty']}@{pos['open_price']}")
+    _save(store, acct, f"open {pos['id']} {sym} {side} {pos['qty']}@{pos['open_price']}")
     return {"position": pos, "account": _view(acct)}
 
 
@@ -133,7 +142,7 @@ def api_close(body: CloseIn):
         tr = engine.close_position(acct, body.position_id, body.qty, body.price, _time(body.executed_at), now, body.memo)
     except engine.TradeError as e:
         raise _err(e)
-    tstore.save(store, acct, f"close {tr['id']} {tr['symbol']} {tr['qty']}@{tr['close_price']} {tr['net_pnl']:+,}")
+    _save(store, acct, f"close {tr['id']} {tr['symbol']} {tr['qty']}@{tr['close_price']} {tr['net_pnl']:+,}")
     return {"trade": tr, "account": _view(acct)}
 
 
@@ -142,10 +151,7 @@ def api_reset(body: ResetIn):
     """新しい口座を作って切り替える。過去の口座ファイルはそのまま残す。"""
     store = tstore.get_store()
     acct = engine.new_account(market.now_jst(), body.initial_cash)
-    try:
-        tstore.save(store, acct, f"open account {acct['id']}", make_current=True)
-    except Exception as e:
-        raise HTTPException(502, f"口座の保存に失敗しました: {e}")
+    _save(store, acct, f"open account {acct['id']}", make_current=True)
     return _view(acct)
 
 

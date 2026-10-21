@@ -12,7 +12,8 @@
   function api(method, url, body) {
     return fetch(url, { method: method, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined })
       .then(function (r) {
-        return r.json().catch(function () { return {}; }).then(function (j) {
+        return r.text().then(function (t) {
+          var j; try { j = JSON.parse(t); } catch (e) { j = { detail: t }; }
           if (!r.ok) {
             var d = j.detail;
             throw new Error(Array.isArray(d) ? d.map(function (x) { return x.msg.replace(/^Value error, /, ''); }).join(' / ') : (d || r.statusText));
