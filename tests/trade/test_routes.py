@@ -106,3 +106,15 @@ def test_save_failure_is_502(client, monkeypatch):
     monkeypatch.setattr(tstore, "save", boom)
     r = client.get("/api/trade/account")
     assert r.status_code == 502 and "保存に失敗" in r.json()["detail"]
+
+
+def test_close_group_route_and_roadmap(client):
+    client.post("/api/trade/open", json=open_body(price=1000))
+    assert client.post("/api/trade/open", json=open_body(price=990, stop=980)).status_code == 200
+    a = client.get("/api/trade/account").json()
+    assert len(a["groups"]) == 1 and a["groups"][0]["qty"] == 200 and a["groups"][0]["avg_price"] == 995
+    assert a["roadmap"][0]["title"].startswith("Phase 1")
+    r = client.post("/api/trade/close_group", json={"key": a["groups"][0]["key"], "qty": 200, "price": 1000})
+    assert r.status_code == 200, r.text
+    assert len(r.json()["trades"]) == 2 and r.json()["account"]["positions"] == []
+    assert r.json()["trades"][1]["add_type"] == "nanpin"

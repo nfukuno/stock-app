@@ -90,5 +90,25 @@ class CloseIn(BaseModel):
         return v
 
 
+class CloseGroupIn(BaseModel):
+    key: str                                   # engine.group_key（銘柄|売買|区分）
+    qty: int = Field(gt=0)
+    price: float = Field(gt=0)
+    executed_at: datetime | None = None
+    memo: str = Field(default="", max_length=c.MEMO_MAX)
+
+    @field_validator("executed_at", mode="before")
+    @classmethod
+    def _time(cls, v):
+        return _parse_time(v)
+
+    @field_validator("qty")
+    @classmethod
+    def _lot(cls, v):
+        if v % c.LOT:
+            raise ValueError(f"株数は {c.LOT} 株単位です")
+        return v
+
+
 class ResetIn(BaseModel):
     initial_cash: int = Field(default=c.INITIAL_CASH, ge=c.MIN_MARGIN, le=1_000_000_000)

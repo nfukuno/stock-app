@@ -25,6 +25,51 @@
 
   function msg(el, text, ok) { el.innerHTML = text ? '<span class="' + (ok ? 'pos' : 'neg') + '">' + esc(text) + '</span>' : ''; }
 
+  function closeForm(attr, qty, last, label) {
+    return '<form class="closeform" ' + attr + '>' +
+      '<input name="qty" type="number" min="' + T.lot + '" step="' + T.lot + '" max="' + qty + '" value="' + qty + '" title="株数">' +
+      '<input name="price" type="number" step="0.1" min="0.1" placeholder="返済価格" value="' + (last || '') + '" required>' +
+      '<input name="executed_at" type="datetime-local" step="1" title="空欄 = 今" style="width:180px">' +
+      '<input name="memo" placeholder="決済理由" style="width:140px">' +
+      '<button type="submit">' + label + '</button></form>';
+  }
+
+  function posRow(p, single) {
+    var add = p.add_type === 'nanpin' ? ' <span class="badge warn">ナンピン</span>' : p.add_type === 'pyramid' ? ' <span class="badge">増し玉</span>' : '';
+    return '<tr' + (single ? '' : ' class="member"') + '><td>' + p.id + '</td><td>' + esc(p.symbol) + ' ' + esc(p.name) + add + '</td><td>' + esc(p.label) + '</td>' +
+      '<td class="' + p.side + '">' + (p.side === 'long' ? '買' : '売') + '</td><td class="num">' + yen(p.qty) + '</td>' +
+      '<td class="num">' + p.open_price + '</td><td class="num">' + (p.last == null ? '-' : p.last) + '</td>' +
+      '<td class="num ' + cls(p.unrealized) + '">' + signed(p.unrealized) + '</td><td class="num">' + yen(p.accrued_cost) + '</td>' +
+      '<td>' + (p.stop || '-') + ' / ' + (p.target || '-') + '</td>' +
+      '<td>' + hm(p.opened_at) + '<br><span class="muted">' + p.expiry_date + '</span></td>' +
+      '<td>' + closeForm('data-id="' + p.id + '"', p.qty, p.last, '返済') + '</td></tr>';
+  }
+
+  var FMT = {
+    int: function (v) { return v == null ? '-' : String(v); },
+    pct: function (v) { return v == null ? '-' : (v * 100).toFixed(1) + '%'; },
+    r: function (v) { return v == null ? '-' : v.toFixed(2) + 'R'; },
+    ratio: function (v) { return v == null ? '-' : v.toFixed(2); },
+  };
+
+  function renderRoadmap(phases) {
+    $('roadmap').innerHTML = phases.map(function (ph, i) {
+      var next = phases[i + 1];
+      var conds = ph.conditions.length ? '<div class="conds"><div class="muted">' + esc(ph.next_label) + '</div><ul>' +
+        ph.conditions.map(function (c) {
+          return '<li class="' + (c.ok ? 'pos' : '') + '">' + (c.ok ? '✅ ' : '⬜ ') + esc(c.label) +
+            ' <span class="muted">（現在: ' + FMT[c.fmt](c.value) + '）</span></li>';
+        }).join('') + '</ul>' +
+        (ph.ready && next && !next.done ? '<div class="ready">' + (next.title.indexOf('本番') === 0
+          ? '条件達成！ 最小単位での本番に進めます（Phase 4 の本番記録・比較機能も使いましょう）'
+          : '条件達成！ Claude に「' + esc(next.title.split(':')[0]) + ' を作って」と依頼してください') + '</div>' : '') +
+        '</div>' : '';
+      return '<div class="phase' + (ph.done ? ' done' : '') + '"><h3>' + (ph.done ? '✔ ' : '') + esc(ph.title) +
+        ' <span class="badge ' + (ph.done ? 'ok' : 'pending') + '">' + (ph.done ? '実装済み' : '未実装') + '</span></h3><ul>' +
+        ph.items.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>' + conds + '</div>';
+    }).join('');
+  }
+
   function render(a) {
     var mr = a.maintenance_rate;
     var k = [
@@ -47,20 +92,21 @@
     $('alerts').innerHTML = al.map(function (t) { return '<div class="alert">' + esc(t) + '</div>'; }).join('');
     $('asof').textContent = '（' + hm(a.as_of) + ' 時点 / 口座 ' + a.account_id + '）';
 
-    $('positions').innerHTML = a.positions.length ? a.positions.map(function (p) {
-      return '<tr><td>' + p.id + '</td><td>' + esc(p.symbol) + ' ' + esc(p.name) + '</td><td>' + esc(p.label) + '</td>' +
-        '<td class="' + p.side + '">' + (p.side === 'long' ? '買' : '売') + '</td><td class="num">' + yen(p.qty) + '</td>' +
-        '<td class="num">' + p.open_price + '</td><td class="num">' + (p.last == null ? '-' : p.last) + '</td>' +
-        '<td class="num ' + cls(p.unrealized) + '">' + signed(p.unrealized) + '</td><td class="num">' + yen(p.accrued_cost) + '</td>' +
-        '<td>' + (p.stop || '-') + ' / ' + (p.target || '-') + '</td>' +
-        '<td>' + hm(p.opened_at) + '<br><span class="muted">' + p.expiry_date + '</span></td>' +
-        '<td><form class="closeform" data-id="' + p.id + '">' +
-        '<input name="qty" type="number" min="' + T.lot + '" step="' + T.lot + '" max="' + p.qty + '" value="' + p.qty + '" title="株数">' +
-        '<input name="price" type="number" step="0.1" min="0.1" placeholder="返済価格" value="' + (p.last || '') + '" required>' +
-        '<input name="executed_at" type="datetime-local" step="1" title="空欄 = 今" style="width:180px">' +
-        '<input name="memo" placeholder="決済理由" style="width:140px">' +
-        '<button type="submit">返済</button></form></td></tr>';
+    $('positions').innerHTML = a.groups.length ? a.groups.map(function (g) {
+      var single = g.members.length === 1;
+      var rows = g.members.map(function (p) { return posRow(p, single); }).join('');
+      if (single) return rows;
+      // 2 本以上の建玉 → 合計行（平均建値・合計評価損益・まとめて返済）を先頭に
+      return '<tr class="grouprow"><td>合計 ' + g.members.length + '本</td><td>' + esc(g.symbol) + ' ' + esc(g.name) +
+        (g.nanpin ? ' <span class="badge warn">ナンピン</span>' : '') + '</td><td>' + esc(g.label) + '</td>' +
+        '<td class="' + g.side + '">' + (g.side === 'long' ? '買' : '売') + '</td><td class="num">' + yen(g.qty) + '</td>' +
+        '<td class="num" title="平均建値">' + g.avg_price + '<br><span class="muted">平均</span></td><td class="num">' + (g.last == null ? '-' : g.last) + '</td>' +
+        '<td class="num ' + cls(g.unrealized) + '">' + signed(g.unrealized) + '</td><td class="num">' + yen(g.accrued_cost) + '</td>' +
+        '<td></td><td class="muted">古い建玉から返済</td>' +
+        '<td>' + closeForm('data-key="' + esc(g.key) + '"', g.qty, g.last, 'まとめて返済') + '</td></tr>' + rows;
     }).join('') : '<tr><td colspan="12" class="muted">建玉はありません</td></tr>';
+
+    renderRoadmap(a.roadmap);
 
     $('today').innerHTML = a.today_trades.length ? a.today_trades.map(function (t) {
       var reason = t.exit_reason === 'manual' ? esc(t.exit_memo) : '<span class="badge late">強制返済</span>';
@@ -125,12 +171,16 @@
   $('positions').addEventListener('submit', function (e) {
     e.preventDefault();
     var f = e.target;
-    var b = { position_id: f.dataset.id, qty: +f.qty.value, price: +f.price.value, executed_at: f.executed_at.value || null, memo: f.memo.value };
+    var b = { qty: +f.qty.value, price: +f.price.value, executed_at: f.executed_at.value || null, memo: f.memo.value };
+    var group = !!f.dataset.key;
+    if (group) b.key = f.dataset.key; else b.position_id = f.dataset.id;
     f.querySelector('button').disabled = true;
-    api('POST', '/api/trade/close', b).then(function (r) {
-      var t = r.trade;
+    api('POST', group ? '/api/trade/close_group' : '/api/trade/close', b).then(function (r) {
+      var ts = group ? r.trades : [r.trade];
+      var net = ts.reduce(function (s, t) { return s + t.net_pnl; }, 0);
       editing = false;
-      msg($('closemsg'), t.id + ' ' + t.symbol + ' ' + t.qty + '株 @' + t.close_price + ' を返済しました（損益 ' + signed(t.net_pnl) + ' 円）', t.net_pnl >= 0);
+      msg($('closemsg'), ts.map(function (t) { return t.id; }).join(', ') + ' ' + ts[0].symbol + ' ' + b.qty + '株 @' + b.price +
+        ' を返済しました（損益 ' + signed(net) + ' 円）', net >= 0);
       render(r.account);
     }).catch(function (e) { msg($('closemsg'), e.message); f.querySelector('button').disabled = false; });
   });

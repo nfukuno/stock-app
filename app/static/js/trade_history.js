@@ -57,6 +57,7 @@
       ['平均保有（勝 / 負）', hold(s.avg_hold_win) + ' / ' + hold(s.avg_hold_loss)],
       ['損切り設定率', pct(s.stop_set_rate)],
       ['損切りライン超えの決済', s.beyond_stop + '件', s.beyond_stop ? 'neg' : ''],
+      ['ナンピン', s.nanpin_count + '回', s.nanpin_count ? 'neg' : ''],
     ];
     $('kpis').innerHTML = k.map(function (x) {
       return '<div class="kpi"><div class="l">' + x[0] + '</div><div class="v ' + (x[2] || '') + '">' + x[1] + '</div></div>';
@@ -64,6 +65,7 @@
     $('curve').innerHTML = curve(s.curve);
     $('groups').innerHTML = [
       group('エントリー理由別', s.by_tag), group('時間帯別（建てた時刻）', s.by_hour), group('曜日別', s.by_weekday),
+      group('ナンピン・増し玉別（追加した建玉）', s.by_add_type), group('ナンピンした建玉群とそれ以外', s.by_nanpin_group),
       group('感情別', s.by_emotion), group('売買別', s.by_side), group('信用区分別', s.by_margin_type), group('銘柄別', s.by_symbol),
     ].join('');
     $('trades').innerHTML = j.trades.length ? j.trades.map(function (t) {
@@ -74,7 +76,8 @@
         '<td class="num">' + (t.r_multiple == null ? '-' : t.r_multiple.toFixed(2)) + '</td>' +
         '<td>' + esc((t.tags || []).join('・')) + (t.emotion ? ' / ' + esc(t.emotion) : '') +
         (t.exit_reason !== 'manual' ? ' <span class="badge late">強制返済</span>' : '') +
-        (t.beyond_stop ? ' <span class="badge warn">損切り超え</span>' : '') + '</td>' +
+        (t.beyond_stop ? ' <span class="badge warn">損切り超え</span>' : '') +
+        (t.add_type === 'nanpin' ? ' <span class="badge warn">ナンピン</span>' : t.add_type === 'pyramid' ? ' <span class="badge">増し玉</span>' : '') + '</td>' +
         '<td class="wrap">' + esc(t.memo) + (t.exit_memo ? '<br><span class="muted">' + esc(t.exit_memo) + '</span>' : '') + '</td></tr>';
     }).join('') : '<tr><td colspan="12" class="muted">まだ返済した取引がありません</td></tr>';
   }).catch(function (e) { $('kpis').textContent = '読み込みに失敗しました: ' + e.message; });

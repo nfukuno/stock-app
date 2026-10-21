@@ -131,3 +131,40 @@ def test_stats():
 def test_order_validation(kw):
     with pytest.raises(ValueError):
         order(**kw)
+
+
+def test_groups_nanpin_and_close_group():
+    acct = e.new_account(NOW)
+    a = opened(acct, price=1000, stop=990)
+    b = opened(acct, price=980, stop=970, at=jst(2026, 10, 19, 10, 0))          # 平均より安く買い増し → ナンピン
+    c = opened(acct, price=1010, stop=1000, at=jst(2026, 10, 19, 10, 0))        # 平均(990)より高い → 増し玉
+    opened(acct, side="short", stop=1010)                                       # 売りは別グループ
+    assert b["add_type"] == "nanpin" and c["add_type"] == "pyramid" and a.get("add_type") is None
+    assert a["nanpin_group"] and b["nanpin_group"] and not c["nanpin_group"]
+    s = e.summary(acct, {"7203.T": 1000}, NOW)
+    g = next(x for x in s["groups"] if x["side"] == "long")
+    assert len(s["groups"]) == 2 and g["qty"] == 300 and g["avg_price"] == pytest.approx(996.67)
+    assert g["unrealized"] == 0 + 2000 - 1000 and g["nanpin"]
+    at = jst(2026, 10, 19, 11, 0)
+    with pytest.raises(e.TradeError, match="合計"):
+        e.close_group(acct, g["key"], 400, 1000, at, at)
+    ts = e.close_group(acct, g["key"], 200, 1000, at, at)                       # 古い順: a 100 + b 100
+    assert [t["position_id"] for t in ts] == [a["id"], b["id"]] and [p["id"] for p in acct["positions"]][0] == c["id"]
+    st = e.stats(acct["trades"])
+    assert st["nanpin_count"] == 1 and {x["key"]: x["n"] for x in st["by_nanpin_group"]} == {"ナンピンした建玉": 2}
+
+
+def test_roadmap():
+    acct = e.new_account(NOW)
+    rm = e.roadmap(e.stats([]), acct["initial_cash"])
+    assert rm[0]["done"] and not rm[0]["ready"] and all(not x["ok"] for x in rm[0]["conditions"])
+    for i in range(30):                                                          # 10 日 × 3 回、全て損切り設定あり
+        d = date(2026, 10, 1)
+        for _ in range(i // 3):
+            d = market.next_trading_day(d)
+        at = jst(d.year, d.month, d.day, 10, 0)
+        p = opened(acct, margin_type="day", at=at)
+        e.close_position(acct, p["id"], 100, 1005, jst(d.year, d.month, d.day, 10, 30), at.replace(minute=30))
+    rm = e.roadmap(e.stats(acct["trades"]), acct["initial_cash"])
+    assert rm[0]["ready"] and [x["value"] for x in rm[0]["conditions"]] == [30, 10, 1.0]
+    assert rm[-1]["conditions"] == [] and not rm[-1]["ready"]

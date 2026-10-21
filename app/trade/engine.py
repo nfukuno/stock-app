@@ -93,6 +93,24 @@ def _sign(side: str) -> int:
     return 1 if side == "long" else -1
 
 
+# ---------------------------------------------------------------- 建玉のまとまり
+ADD_LABELS = {None: "単独・初回", "nanpin": "ナンピン（不利な価格で追加）", "pyramid": "買い増し・売り増し（有利な価格で追加）"}
+
+
+def group_key(p: dict) -> str:
+    """同じ銘柄・同じ売買・同じ信用区分の建玉をひとまとまりとして扱う。"""
+    return f"{p['symbol']}|{p['side']}|{p['margin_type']}"
+
+
+def _same_group(acct: dict, key: str) -> list[dict]:
+    return sorted((p for p in acct["positions"] if group_key(p) == key), key=lambda p: (p["opened_at"], p["id"]))
+
+
+def avg_price(positions: list[dict]) -> float:
+    qty = sum(p["qty"] for p in positions)
+    return sum(p["open_price"] * p["qty"] for p in positions) / qty
+
+
 # ---------------------------------------------------------------- 新規・返済
 def open_position(acct: dict, o, at: datetime, now: datetime, name: str, prices: dict[str, float | None]) -> dict:
     _check_time(at, now)
@@ -105,6 +123,15 @@ def open_position(acct: dict, o, at: datetime, now: datetime, name: str, prices:
     if need > s["free_margin"]:
         raise TradeError(f"建余力が不足しています（必要保証金 {need:,.0f} 円 / 余力 {max(0, s['free_margin']):,.0f} 円）")
     mt = c.MARGIN_TYPES[o.margin_type]
+    key = f"{o.symbol}|{o.side}|{o.margin_type}"
+    existing = _same_group(acct, key)
+    add_type = None
+    if existing:
+        # 既存建玉の平均建値より不利な価格（買いなら安く、売りなら高く）で追加 = ナンピン
+        add_type = "nanpin" if (o.price - avg_price(existing)) * _sign(o.side) < 0 else "pyramid"
+        if add_type == "nanpin":
+            for p in existing:
+                p["nanpin_group"] = True
     pos = {
         "id": _next_id(acct, "P"), "symbol": o.symbol, "name": name, "margin_type": o.margin_type,
         "side": o.side, "qty": o.qty, "initial_qty": o.qty, "open_price": o.price,
@@ -112,6 +139,7 @@ def open_position(acct: dict, o, at: datetime, now: datetime, name: str, prices:
         "entered_at": now.isoformat(timespec="seconds"),
         "expiry_date": (expiry_date(at.date(), mt["expiry_months"]) if mt["expiry_months"] else at.date()).isoformat(),
         "stop": o.stop, "target": o.target, "tags": o.tags, "emotion": o.emotion, "memo": o.memo,
+        "add_type": add_type, "nanpin_group": add_type == "nanpin",
     }
     acct["positions"].append(pos)
     return pos
@@ -153,13 +181,31 @@ def close_position(acct: dict, position_id: str, qty: int, price: float, at: dat
                        if pos.get("stop") and pos.get("target") else None),
         "beyond_stop": ((price - pos["stop"]) * sign < 0) if pos.get("stop") else None,
         "tags": pos["tags"], "emotion": pos["emotion"], "memo": pos["memo"], "exit_memo": memo,
-        "exit_reason": reason,
+        "exit_reason": reason, "add_type": pos.get("add_type"), "nanpin_group": bool(pos.get("nanpin_group")),
     }
     acct["trades"].append(trade)
     pos["qty"] -= qty
     if pos["qty"] == 0:
         acct["positions"].remove(pos)
     return trade
+
+
+def close_group(acct: dict, key: str, qty: int, price: float, at: datetime, now: datetime, memo: str = "") -> list[dict]:
+    """まとめて返済。古い建玉から順に qty 株を返済する（途中で失敗したら口座は保存しない前提）。"""
+    group = _same_group(acct, key)
+    total = sum(p["qty"] for p in group)
+    if not group:
+        raise TradeError("建玉が見つかりません（すでに返済済みの可能性があります）", 404)
+    if qty > total:
+        raise TradeError(f"返済株数が建玉合計 {total} 株を超えています")
+    trades, left = [], qty
+    for p in group:
+        if left == 0:
+            break
+        n = min(left, p["qty"])
+        trades.append(close_position(acct, p["id"], n, price, at, now, memo))
+        left -= n
+    return trades
 
 
 def apply_forced(acct: dict, now: datetime, close_price: Callable[[str, date], float | None]) -> list[dict]:
@@ -209,8 +255,26 @@ def summary(acct: dict, prices: dict[str, float | None], now: datetime) -> dict:
         "margin_call": maintenance is not None and maintenance < c.MAINTENANCE_RATE,
         "free_margin": round(free), "buying_power": max(0, round(free / c.MARGIN_RATE)) if effective >= c.MIN_MARGIN else 0,
         "today_realized": sum(t["net_pnl"] for t in today_trades), "today_count": len(today_trades),
-        "positions": rows, "prices_stale": stale,
+        "positions": rows, "groups": _groups(rows), "prices_stale": stale,
     }
+
+
+def _groups(rows: list[dict]) -> list[dict]:
+    """建玉の合計行（同じ銘柄・売買・区分）。建てた順に並べ、各建玉の行を members に持つ。"""
+    out: dict[str, dict] = {}
+    for r in sorted(rows, key=lambda r: (r["opened_at"], r["id"])):
+        g = out.setdefault(group_key(r), {"key": group_key(r), "symbol": r["symbol"], "name": r["name"],
+                                          "side": r["side"], "margin_type": r["margin_type"], "label": r["label"],
+                                          "last": r["last"], "members": []})
+        g["members"].append(r)
+    for g in out.values():
+        m = g["members"]
+        g["qty"] = sum(r["qty"] for r in m)
+        g["avg_price"] = round(avg_price(m), 2)
+        g["unrealized"] = None if any(r["unrealized"] is None for r in m) else sum(r["unrealized"] for r in m)
+        g["accrued_cost"] = sum(r["accrued_cost"] for r in m)
+        g["nanpin"] = any(r.get("add_type") == "nanpin" for r in m)
+    return list(out.values())
 
 
 # ---------------------------------------------------------------- 成績
@@ -267,4 +331,34 @@ def stats(trades: list[dict]) -> dict:
         "by_weekday": by(lambda t: WEEKDAYS[date.fromisoformat(t["open_date"]).weekday()], WEEKDAYS.index),
         "by_emotion": by(lambda t: t["emotion"] or "(なし)"),
         "by_symbol": by(lambda t: f"{t['symbol']} {t['name']}".strip()),
+        "by_add_type": by(lambda t: ADD_LABELS[t.get("add_type")], list(ADD_LABELS.values()).index),
+        "by_nanpin_group": by(lambda t: "ナンピンした建玉" if t.get("nanpin_group") else "ナンピンなし",
+                              lambda k: k != "ナンピンなし"),
+        "nanpin_count": sum(1 for t in ts if t.get("add_type") == "nanpin"),
+        "trading_days": len({t["open_date"] for t in ts}),
     }
+
+
+# ---------------------------------------------------------------- ロードマップ
+_OPS = {">=": lambda v, t: v >= t, ">": lambda v, t: v > t, "<=": lambda v, t: v <= t}
+
+
+def roadmap(st: dict, initial_cash: int) -> list[dict]:
+    """各フェーズと「次に進む条件」の達成状況。取引がまだない指標は未達扱い。"""
+    n = st["n"]
+    metrics = {
+        "n": n, "trading_days": st["trading_days"], "stop_set_rate": st["stop_set_rate"],
+        "avg_r": st["avg_r"], "profit_factor": st["profit_factor"],
+        "beyond_stop_rate": st["beyond_stop"] / n if n else None,
+        "nanpin_rate": st["nanpin_count"] / n if n else None,
+        "max_dd_rate": st["max_drawdown"] / initial_cash if n else None,
+    }
+    out = []
+    for ph in c.ROADMAP:
+        conds = [{"label": label, "value": metrics[m], "fmt": fmt,
+                  "ok": metrics[m] is not None and _OPS[op](metrics[m], th)}
+                 for label, m, op, th, fmt in ph.get("next_conditions", [])]
+        out.append({"title": ph["title"], "done": ph["done"], "items": ph["items"],
+                    "next_label": ph.get("next_label", "次のフェーズに進む条件"), "conditions": conds,
+                    "ready": bool(conds) and all(x["ok"] for x in conds)})
+    return out

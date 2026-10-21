@@ -11,7 +11,7 @@ from app.forecast import config as fconfig
 from app.forecast import market
 from app.forecast.routes import resolve_name
 from . import config, engine, store as tstore
-from .models import CloseIn, OpenIn, ResetIn
+from .models import CloseGroupIn, CloseIn, OpenIn, ResetIn
 
 router = APIRouter()
 templates = Jinja2Templates(directory=str(fconfig.TEMPLATES_DIR))
@@ -75,6 +75,7 @@ def _view(acct: dict) -> dict:
     today = now.date().isoformat()
     s["today_trades"] = [t for t in reversed(acct["trades"]) if t["close_date"] == today]
     s["as_of"] = now.isoformat(timespec="seconds")
+    s["roadmap"] = engine.roadmap(engine.stats(acct["trades"]), acct["initial_cash"])
     return s
 
 
@@ -150,6 +151,20 @@ def api_close(body: CloseIn):
         raise _err(e)
     _save(store, acct, f"close {tr['id']} {tr['symbol']} {tr['qty']}@{tr['close_price']} {tr['net_pnl']:+,}")
     return {"trade": tr, "account": _view(acct)}
+
+
+@router.post("/api/trade/close_group")
+def api_close_group(body: CloseGroupIn):
+    store = tstore.get_store()
+    acct = _load(store)
+    now = market.now_jst()
+    try:
+        trades = engine.close_group(acct, body.key, body.qty, body.price, _time(body.executed_at), now, body.memo)
+    except engine.TradeError as e:
+        raise _err(e)
+    net = sum(t["net_pnl"] for t in trades)
+    _save(store, acct, f"close {','.join(t['id'] for t in trades)} {trades[0]['symbol']} {body.qty}@{body.price} {net:+,}")
+    return {"trades": trades, "account": _view(acct)}
 
 
 @router.post("/api/trade/reset")

@@ -17,10 +17,15 @@
   .chips { display:flex; flex-wrap:wrap; gap:6px; } .chips label { flex-direction:row; align-items:center; gap:4px; color:var(--fg); font-size:13px; }
   td.num, th.num { text-align:right; font-variant-numeric:tabular-nums; }
   .long { color:var(--up); font-weight:600; } .short { color:var(--down); font-weight:600; }
-  .msg { min-height:1.5em; } .closeform { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+  .msg { min-height:1.5em; } .closeform { display:flex; flex-wrap:nowrap; gap:6px; align-items:center; }
   .closeform input { width:110px; }
   .table-wrap th, .table-wrap td { white-space:nowrap; } .table-wrap td.wrap { white-space:normal; min-width:220px; }
   .table-wrap { overflow-x:auto; }
+  tr.grouprow td { background:#f3f6fd; font-weight:600; } tr.member td:first-child { padding-left:20px; }
+  .phase { border-left:4px solid var(--line); padding:4px 0 4px 14px; margin:0 0 16px; }
+  .phase.done { border-color:var(--ok); } .phase h3 { font-size:15px; margin:0 0 6px; }
+  .phase ul { margin:4px 0; padding-left:20px; } .conds { background:#f7f8fb; border-radius:8px; padding:8px 12px; margin-top:6px; }
+  .conds ul { list-style:none; padding-left:0; } .ready { margin-top:6px; font-weight:700; color:var(--ok); }
   .alert { background:#ffe1df; border:1px solid #f3b4ae; border-radius:8px; padding:8px 12px; margin-bottom:10px; }
 </style>
 {% endblock %}
@@ -100,6 +105,11 @@
     <label>初期保証金 <input name="initial_cash" type="number" step="100000" min="300000" value="5000000"></label>
     <button type="submit" style="background:var(--ng)">リセット</button>
   </form>
+</div>
+<div class="card">
+  <h2>ロードマップ</h2>
+  <p class="muted">各フェーズの「次に進む条件」は、この口座の成績から自動で判定しています。</p>
+  <div id="roadmap"></div>
 </div>
 <script>window.TRADE = {lot: {{ lot }}, labels: {{ margin_types | tojson }}};</script>
 <script src="/static/js/trade.js?v={{ v }}"></script>
