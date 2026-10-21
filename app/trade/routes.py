@@ -88,9 +88,15 @@ def _err(e: engine.TradeError):
 
 
 # ---------------------------------------------------------------- 画面
+def _static_version() -> int:
+    """JS のキャッシュ対策。更新時刻をクエリに付けて、変更後は必ず読み直させる。"""
+    js = fconfig.STATIC_DIR / "js"
+    return int(max((js / f).stat().st_mtime for f in ("trade.js", "trade_history.js")))
+
+
 def _ctx() -> dict:
     return {"margin_types": config.MARGIN_TYPES, "tags": config.TAGS, "emotions": config.EMOTIONS,
-            "lot": config.LOT, "memo_max": config.MEMO_MAX}
+            "lot": config.LOT, "memo_max": config.MEMO_MAX, "v": _static_version()}
 
 
 @router.get("/trade", response_class=HTMLResponse)
