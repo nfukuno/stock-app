@@ -20,7 +20,7 @@
   button:disabled { background:#aab; cursor:not-allowed; }
   input, select, textarea { font:inherit; padding:6px 8px; border:1px solid var(--line); border-radius:6px; }
   .badge { display:inline-block; padding:1px 8px; border-radius:10px; font-size:12px; background:#eef1f8; }
-  .badge.late { background:#fff1d6; } .badge.ok { background:#dff5e8; } .badge.pending { background:#eef1f8; }
+  .badge.warn { background:#ffe1df; } .badge.late { background:#fff1d6; } .badge.ok { background:#dff5e8; } .badge.pending { background:#eef1f8; }
 </style>
 {% block head %}{% endblock %}
 </head>
@@ -28,6 +28,8 @@
 <header class="nav">
   <a href="/forecast" class="{{ 'active' if nav == 'index' }}">日足予想</a>
   <a href="/forecast/dashboard" class="{{ 'active' if nav == 'dashboard' }}">成績ダッシュボード</a>
+  <a href="/trade" class="{{ 'active' if nav == 'trade' }}">トレード口座</a>
+  <a href="/trade/history" class="{{ 'active' if nav == 'trade_history' }}">トレード分析</a>
   <a href="/" class="muted">ドローダウン一覧</a>
 </header>
 <main>{% block body %}{% endblock %}</main>

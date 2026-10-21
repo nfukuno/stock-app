@@ -1,0 +1,106 @@
+{% extends "forecast_base.html" %}
+{% set nav = 'trade' %}
+{% block title %}トレード口座{% endblock %}
+{% block head %}
+<style>
+  .kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; }
+  .kpi { border:1px solid var(--line); border-radius:8px; padding:8px 10px; }
+  .kpi .v { font-size:18px; font-weight:700; font-variant-numeric:tabular-nums; }
+  .kpi .l { font-size:12px; color:var(--muted); }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:10px 14px; }
+  .grid label { display:flex; flex-direction:column; gap:4px; font-size:12px; color:var(--muted); }
+  .seg { display:inline-flex; border:1px solid var(--line); border-radius:8px; overflow:hidden; }
+  .grid .seg label { display:block; font-size:14px; }
+  .seg input { display:none; } .seg span { padding:6px 14px; cursor:pointer; display:block; color:var(--fg); }
+  .seg input:checked + span { background:var(--accent); color:#fff; }
+  .seg.side input[value=long]:checked + span { background:var(--up); } .seg.side input[value=short]:checked + span { background:var(--down); }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; } .chips label { flex-direction:row; align-items:center; gap:4px; color:var(--fg); font-size:13px; }
+  td.num, th.num { text-align:right; font-variant-numeric:tabular-nums; }
+  .long { color:var(--up); font-weight:600; } .short { color:var(--down); font-weight:600; }
+  .msg { min-height:1.5em; } .closeform { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+  .closeform input { width:110px; }
+  .table-wrap th, .table-wrap td { white-space:nowrap; } .table-wrap td.wrap { white-space:normal; min-width:220px; }
+  .table-wrap { overflow-x:auto; }
+  .alert { background:#ffe1df; border:1px solid #f3b4ae; border-radius:8px; padding:8px 12px; margin-bottom:10px; }
+</style>
+{% endblock %}
+{% block body %}
+<h1>トレード口座 <span class="muted" style="font-size:13px;font-weight:400">仮想信用口座（デモ）</span></h1>
+
+<div class="card">
+  <div id="alerts"></div>
+  <div class="kpis" id="kpis"></div>
+  <p class="muted" style="margin:8px 0 0;font-size:12px">
+    実質保証金 = 現金保証金 + 評価損（評価益は算入しない）− 未払い金利。維持率 20% 未満で追証（新規建不可）。
+    現在値は yfinance の遅延値です。<span id="asof"></span>
+  </p>
+</div>
+
+<div class="card">
+  <h2>新規注文</h2>
+  <form id="openform">
+    <div class="grid">
+      <label>銘柄コード<input name="symbol" id="symbol" placeholder="7203 / 285A" required autocomplete="off"></label>
+      <label>銘柄名（任意）<input name="name" id="symname" placeholder="自動取得"></label>
+      <label>信用区分
+        <select name="margin_type">{% for k, m in margin_types.items() %}<option value="{{ k }}">{{ m.label }}</option>{% endfor %}</select>
+      </label>
+      <label>売買
+        <span class="seg side">
+          <label><input type="radio" name="side" value="long" checked><span>買い</span></label>
+          <label><input type="radio" name="side" value="short"><span>売り</span></label>
+        </span>
+      </label>
+      <label>株数（{{ lot }}株単位）<input name="qty" type="number" min="{{ lot }}" step="{{ lot }}" value="{{ lot }}" required></label>
+      <label>約定価格<input name="price" id="price" type="number" step="0.1" min="0.1" required></label>
+      <label>約定時刻（空欄 = 今）<input name="executed_at" type="datetime-local" step="1"></label>
+      <label>損切りライン<input name="stop" type="number" step="0.1" min="0.1" placeholder="必須推奨"></label>
+      <label>利確目標<input name="target" type="number" step="0.1" min="0.1"></label>
+      <label>感情
+        <select name="emotion"><option value="">-</option>{% for e in emotions %}<option>{{ e }}</option>{% endfor %}</select>
+      </label>
+    </div>
+    <div style="margin-top:10px">
+      <div class="muted" style="font-size:12px;margin-bottom:4px">エントリー理由</div>
+      <div class="chips">{% for t in tags %}<label><input type="checkbox" name="tags" value="{{ t }}">{{ t }}</label>{% endfor %}</div>
+    </div>
+    <label style="display:flex;flex-direction:column;gap:4px;margin-top:10px;font-size:12px;color:var(--muted)">メモ（根拠・シナリオ）
+      <textarea name="memo" rows="2" maxlength="{{ memo_max }}"></textarea></label>
+    <div style="margin-top:10px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+      <button type="submit">発注（約定として記録）</button>
+      <span class="muted" id="preview"></span>
+    </div>
+    <div class="msg" id="openmsg"></div>
+  </form>
+</div>
+
+<div class="card">
+  <h2>建玉一覧</h2>
+  <div class="table-wrap"><table>
+    <thead><tr><th>ID</th><th>銘柄</th><th>区分</th><th>売買</th><th class="num">株数</th><th class="num">建値</th><th class="num">現在値</th>
+      <th class="num">評価損益</th><th class="num">金利等</th><th>損切/利確</th><th>建日 / 期日</th><th>返済</th></tr></thead>
+    <tbody id="positions"></tbody>
+  </table></div>
+  <div class="msg" id="closemsg"></div>
+</div>
+
+<div class="card">
+  <h2>本日の約定（返済）</h2>
+  <div class="table-wrap"><table>
+    <thead><tr><th>ID</th><th>銘柄</th><th>売買</th><th class="num">株数</th><th class="num">建値→返済</th><th>保有</th>
+      <th class="num">損益</th><th class="num">R</th><th>理由</th></tr></thead>
+    <tbody id="today"></tbody>
+  </table></div>
+</div>
+
+<div class="card">
+  <h2>口座リセット</h2>
+  <p class="muted">新しい口座を作って切り替えます。過去の口座の記録は残ります。</p>
+  <form id="resetform" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+    <label>初期保証金 <input name="initial_cash" type="number" step="100000" min="300000" value="5000000"></label>
+    <button type="submit" style="background:var(--ng)">リセット</button>
+  </form>
+</div>
+<script>window.TRADE = {lot: {{ lot }}, labels: {{ margin_types | tojson }}};</script>
+<script src="/static/js/trade.js"></script>
+{% endblock %}

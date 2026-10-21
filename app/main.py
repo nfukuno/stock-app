@@ -9,12 +9,14 @@ from app.services.yahoo_finance import get_drawdown_bulk
 from fastapi.staticfiles import StaticFiles
 from app.forecast.config import STATIC_DIR
 from app.forecast.routes import router as forecast_router
+from app.trade.routes import router as trade_router
 
 BASE_DIR = Path(__file__).resolve().parent
 
 app = FastAPI(title="Stock Drawdown Checker")
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 app.include_router(forecast_router)
+app.include_router(trade_router)
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 def load_stock_list():
