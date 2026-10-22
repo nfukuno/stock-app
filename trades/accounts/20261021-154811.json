@@ -3,8 +3,28 @@
   "id": "20261021-154811",
   "created_at": "2026-10-21T15:48:11+09:00",
   "initial_cash": 5000000,
-  "seq": 2,
-  "positions": [],
+  "seq": 3,
+  "positions": [
+    {
+      "id": "P00003",
+      "symbol": "7974.T",
+      "name": "NINTENDO CO LTD",
+      "margin_type": "day",
+      "side": "long",
+      "qty": 100,
+      "initial_qty": 100,
+      "open_price": 8803.0,
+      "opened_at": "2026-10-22T09:19:58+09:00",
+      "open_date": "2026-10-22",
+      "entered_at": "2026-10-22T09:19:58+09:00",
+      "expiry_date": "2026-10-22",
+      "stop": 8788.0,
+      "target": null,
+      "tags": [],
+      "emotion": "",
+      "memo": ""
+    }
+  ],
   "trades": [
     {
       "id": "T00002",
