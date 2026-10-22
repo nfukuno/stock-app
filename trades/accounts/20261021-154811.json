@@ -83,28 +83,55 @@
       "side": "long",
       "qty": 100,
       "open_price": 8803.0,
-      "close_price": 8785.0,
+      "close_price": 8870.0,
       "opened_at": "2026-10-22T09:19:58+09:00",
       "closed_at": "2026-10-22T09:31:09+09:00",
       "open_date": "2026-10-22",
       "close_date": "2026-10-22",
       "entered_at": "2026-10-22T09:31:09+09:00",
       "holding_minutes": 11,
-      "gross_pnl": -1800,
+      "gross_pnl": 6700,
       "carry_cost": 0,
       "carry_days": 0,
       "commission": 0,
-      "net_pnl": -1800,
+      "net_pnl": 6700,
       "stop": 8788.0,
       "target": null,
-      "r_multiple": -1.2,
+      "r_multiple": 4.47,
       "planned_rr": null,
-      "beyond_stop": true,
-      "tags": [],
+      "beyond_stop": false,
+      "tags": [
+        "押し目"
+      ],
       "emotion": "",
-      "memo": "",
-      "exit_memo": "",
-      "exit_reason": "manual"
+      "memo": "9:11でFVGの位置にいたに入り込んでいたのでエントリー。もしかしたら損切されていた可能性もありけり。\n打診的買いの意味も込めてのエントリー",
+      "exit_memo": "返済価格は入れ間違えた",
+      "exit_reason": "manual",
+      "edits": [
+        {
+          "at": "2026-10-22T09:49:31+09:00",
+          "changes": {
+            "close_price": [
+              8785.0,
+              8870.0
+            ],
+            "tags": [
+              [],
+              [
+                "押し目"
+              ]
+            ],
+            "memo": [
+              "",
+              "9:11でFVGの位置にいたに入り込んでいたのでエントリー。もしかしたら損切されていた可能性もありけり。\n打診的買いの意味も込めてのエントリー"
+            ],
+            "exit_memo": [
+              "",
+              "返済価格は入れ間違えた"
+            ]
+          }
+        }
+      ]
     }
   ]
 }
