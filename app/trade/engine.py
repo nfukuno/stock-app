@@ -159,13 +159,6 @@ def close_position(acct: dict, position_id: str, qty: int, price: float, at: dat
             raise TradeError("返済時刻が建てた時刻より前です")
         if at.date().isoformat() > pos["expiry_date"]:
             raise TradeError("期日を過ぎた建玉です")
-    open_date = date.fromisoformat(pos["open_date"])
-    sign = _sign(pos["side"])
-    gross = round((price - pos["open_price"]) * qty * sign)
-    cost, days = carry_cost(pos["margin_type"], pos["side"], pos["open_price"], qty, open_date, at.date())
-    commission = c.MARGIN_TYPES[pos["margin_type"]]["commission"]
-    net = gross - cost - commission
-    risk = abs(pos["open_price"] - pos["stop"]) * qty if pos.get("stop") else None
     trade = {
         "id": _next_id(acct, "T"), "position_id": pos["id"], "symbol": pos["symbol"], "name": pos["name"],
         "margin_type": pos["margin_type"], "side": pos["side"], "qty": qty,
@@ -174,20 +167,75 @@ def close_position(acct: dict, position_id: str, qty: int, price: float, at: dat
         "open_date": pos["open_date"], "close_date": at.date().isoformat(),
         "entered_at": now.isoformat(timespec="seconds"),
         "holding_minutes": int((at - opened).total_seconds() // 60),
-        "gross_pnl": gross, "carry_cost": cost, "carry_days": days, "commission": commission, "net_pnl": net,
+        "commission": c.MARGIN_TYPES[pos["margin_type"]]["commission"],
         "stop": pos.get("stop"), "target": pos.get("target"),
-        "r_multiple": round(net / risk, 2) if risk else None,
-        "planned_rr": (round(abs(pos["target"] - pos["open_price"]) / abs(pos["open_price"] - pos["stop"]), 2)
-                       if pos.get("stop") and pos.get("target") else None),
-        "beyond_stop": ((price - pos["stop"]) * sign < 0) if pos.get("stop") else None,
         "tags": pos["tags"], "emotion": pos["emotion"], "memo": pos["memo"], "exit_memo": memo,
         "exit_reason": reason, "add_type": pos.get("add_type"), "nanpin_group": bool(pos.get("nanpin_group")),
     }
+    _derive(trade)
     acct["trades"].append(trade)
     pos["qty"] -= qty
     if pos["qty"] == 0:
         acct["positions"].remove(pos)
     return trade
+
+
+def _derive(t: dict) -> None:
+    """約定の損益・金利・R などを、建値・返済価格・損切り / 利確から計算し直す。"""
+    sign, qty, op = _sign(t["side"]), t["qty"], t["open_price"]
+    t["gross_pnl"] = round((t["close_price"] - op) * qty * sign)
+    t["carry_cost"], t["carry_days"] = carry_cost(t["margin_type"], t["side"], op, qty,
+                                                  date.fromisoformat(t["open_date"]), date.fromisoformat(t["close_date"]))
+    t["net_pnl"] = t["gross_pnl"] - t["carry_cost"] - t["commission"]
+    stop, target = t.get("stop"), t.get("target")
+    risk = abs(op - stop) * qty if stop else None
+    t["r_multiple"] = round(t["net_pnl"] / risk, 2) if risk else None
+    t["planned_rr"] = round(abs(target - op) / abs(op - stop), 2) if stop and target else None
+    t["beyond_stop"] = ((t["close_price"] - stop) * sign < 0) if stop else None
+
+
+# ---------------------------------------------------------------- 後からの修正・追記
+POSITION_FIELDS = {"open_price", "stop", "target", "tags", "emotion", "memo"}
+TRADE_FIELDS = POSITION_FIELDS | {"close_price", "exit_memo"}
+
+
+def _check_levels(side: str, price: float, stop: float | None, target: float | None) -> None:
+    sign = _sign(side)
+    if stop is not None and (stop - price) * sign >= 0:
+        raise TradeError("損切りラインは買いなら建値より下、売りなら建値より上に置いてください")
+    if target is not None and (target - price) * sign <= 0:
+        raise TradeError("利確目標は買いなら建値より上、売りなら建値より下に置いてください")
+
+
+def _apply_edit(obj: dict, changes: dict, allowed: set, now: datetime) -> dict:
+    """変更を反映し、変わった項目を edits に履歴として残す（修正したことが後から分かるように）。"""
+    bad = set(changes) - allowed
+    if bad:
+        raise TradeError(f"変更できない項目です: {sorted(bad)}")
+    merged = {**obj, **changes}
+    _check_levels(obj["side"], merged["open_price"], merged.get("stop"), merged.get("target"))
+    diff = {k: [obj.get(k), v] for k, v in changes.items() if obj.get(k) != v}
+    if diff:
+        obj.update(changes)
+        obj.setdefault("edits", []).append({"at": now.isoformat(timespec="seconds"), "changes": diff})
+    return diff
+
+
+def edit_position(acct: dict, position_id: str, changes: dict, now: datetime) -> dict:
+    pos = next((p for p in acct["positions"] if p["id"] == position_id), None)
+    if pos is None:
+        raise TradeError("建玉が見つかりません（すでに返済済みの可能性があります）", 404)
+    _apply_edit(pos, changes, POSITION_FIELDS, now)
+    return pos
+
+
+def edit_trade(acct: dict, trade_id: str, changes: dict, now: datetime) -> dict:
+    t = next((t for t in acct["trades"] if t["id"] == trade_id), None)
+    if t is None:
+        raise TradeError("約定が見つかりません", 404)
+    if _apply_edit(t, changes, TRADE_FIELDS, now):
+        _derive(t)
+    return t
 
 
 def close_group(acct: dict, key: str, qty: int, price: float, at: datetime, now: datetime, memo: str = "") -> list[dict]:

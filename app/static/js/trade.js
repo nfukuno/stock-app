@@ -36,7 +36,9 @@
 
   function posRow(p, single) {
     var add = p.add_type === 'nanpin' ? ' <span class="badge warn">ナンピン</span>' : p.add_type === 'pyramid' ? ' <span class="badge">増し玉</span>' : '';
-    return '<tr' + (single ? '' : ' class="member"') + '><td>' + p.id + '</td><td>' + esc(p.symbol) + ' ' + esc(p.name) + add + '</td><td>' + esc(p.label) + '</td>' +
+    items[p.id] = { kind: 'position', obj: p };
+    return '<tr' + (single ? '' : ' class="member"') + '><td>' + p.id + '<br>' + TradeEdit.button(p.id) + '</td><td>' + esc(p.symbol) + ' ' + esc(p.name) + add +
+      TradeEdit.badge(p) + '<div class="memo-line">' + (p.memo ? '📝 ' + esc(p.memo) : 'メモ未入力（✎ 編集から追記できます）') + '</div></td><td>' + esc(p.label) + '</td>' +
       '<td class="' + p.side + '">' + (p.side === 'long' ? '買' : '売') + '</td><td class="num">' + yen(p.qty) + '</td>' +
       '<td class="num">' + p.open_price + '</td><td class="num">' + (p.last == null ? '-' : p.last) + '</td>' +
       '<td class="num ' + cls(p.unrealized) + '">' + signed(p.unrealized) + '</td><td class="num">' + yen(p.accrued_cost) + '</td>' +
@@ -70,7 +72,10 @@
     }).join('');
   }
 
+  var items = {};          // 編集ボタン用: id → {kind, obj}
+
   function render(a) {
+    items = {};
     var mr = a.maintenance_rate;
     var k = [
       ['実質保証金', yen(a.effective_margin)],
@@ -110,7 +115,8 @@
 
     $('today').innerHTML = a.today_trades.length ? a.today_trades.map(function (t) {
       var reason = t.exit_reason === 'manual' ? esc(t.exit_memo) : '<span class="badge late">強制返済</span>';
-      return '<tr><td>' + t.id + '</td><td>' + esc(t.symbol) + ' ' + esc(t.name) + '</td>' +
+      items[t.id] = { kind: 'trade', obj: t };
+      return '<tr><td>' + t.id + '<br>' + TradeEdit.button(t.id) + '</td><td>' + esc(t.symbol) + ' ' + esc(t.name) + TradeEdit.badge(t) + '</td>' +
         '<td class="' + t.side + '">' + (t.side === 'long' ? '買' : '売') + '</td><td class="num">' + yen(t.qty) + '</td>' +
         '<td class="num">' + t.open_price + ' → ' + t.close_price + '</td><td>' + holding(t.holding_minutes) + '</td>' +
         '<td class="num ' + cls(t.net_pnl) + '">' + signed(t.net_pnl) + '</td>' +
@@ -183,6 +189,17 @@
         ' を返済しました（損益 ' + signed(net) + ' 円）', net >= 0);
       render(r.account);
     }).catch(function (e) { msg($('closemsg'), e.message); f.querySelector('button').disabled = false; });
+  });
+
+  // ---- 修正・追記
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest('[data-edit]');
+    if (!b || !items[b.dataset.edit]) return;
+    var it = items[b.dataset.edit];
+    TradeEdit.open(it.kind, it.obj, function (r) {
+      msg($('closemsg'), it.obj.id + ' を更新しました', true);
+      render(r.account);
+    });
   });
 
   // ---- リセット

@@ -110,5 +110,34 @@ class CloseGroupIn(BaseModel):
         return v
 
 
+class EditIn(BaseModel):
+    """後からの修正・追記。送った項目だけ変更する（stop / target は null で解除）。"""
+    open_price: float | None = Field(default=None, gt=0)
+    close_price: float | None = Field(default=None, gt=0)
+    stop: float | None = Field(default=None, gt=0)
+    target: float | None = Field(default=None, gt=0)
+    tags: list[str] | None = None
+    emotion: str | None = None
+    memo: str | None = Field(default=None, max_length=c.MEMO_MAX)
+    exit_memo: str | None = Field(default=None, max_length=c.MEMO_MAX)
+
+    @field_validator("tags")
+    @classmethod
+    def _tags(cls, v):
+        return None if v is None else OpenIn._tags(v)
+
+    @field_validator("emotion")
+    @classmethod
+    def _emotion(cls, v):
+        return None if v is None else OpenIn._emotion(v)
+
+    def changes(self) -> dict:
+        d = self.model_dump(exclude_unset=True)
+        for k in ("open_price", "close_price", "tags", "emotion", "memo", "exit_memo"):
+            if k in d and d[k] is None:
+                del d[k]                       # 必須項目は null なら変更しない
+        return d
+
+
 class ResetIn(BaseModel):
     initial_cash: int = Field(default=c.INITIAL_CASH, ge=c.MIN_MARGIN, le=1_000_000_000)

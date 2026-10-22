@@ -111,6 +111,7 @@
   <p class="muted">各フェーズの「次に進む条件」は、この口座の成績から自動で判定しています。</p>
   <div id="roadmap"></div>
 </div>
-<script>window.TRADE = {lot: {{ lot }}, labels: {{ margin_types | tojson }}};</script>
+<script>window.TRADE = {lot: {{ lot }}, labels: {{ margin_types | tojson }}, tags: {{ tags | tojson }}, emotions: {{ emotions | tojson }}, memo_max: {{ memo_max }}};</script>
+<script src="/static/js/trade_edit.js?v={{ v }}"></script>
 <script src="/static/js/trade.js?v={{ v }}"></script>
 {% endblock %}

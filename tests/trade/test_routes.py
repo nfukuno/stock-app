@@ -118,3 +118,15 @@ def test_close_group_route_and_roadmap(client):
     assert r.status_code == 200, r.text
     assert len(r.json()["trades"]) == 2 and r.json()["account"]["positions"] == []
     assert r.json()["trades"][1]["add_type"] == "nanpin"
+
+
+def test_edit_routes(client):
+    pid = client.post("/api/trade/open", json=open_body(memo="")).json()["position"]["id"]
+    r = client.patch(f"/api/trade/positions/{pid}", json={"memo": "あとで追記", "emotion": "焦り"})
+    assert r.status_code == 200 and r.json()["position"]["memo"] == "あとで追記"
+    t = client.post("/api/trade/close", json={"position_id": pid, "qty": 100, "price": 985}).json()["trade"]
+    r = client.patch(f"/api/trade/trades/{t['id']}", json={"close_price": 1030, "exit_memo": "入力ミス修正"})
+    assert r.status_code == 200, r.text
+    assert r.json()["trade"]["net_pnl"] == 3000 and r.json()["account"]["cash"] == 5_003_000
+    assert client.patch(f"/api/trade/trades/{t['id']}", json={"tags": ["なにか"]}).status_code == 422
+    assert client.patch("/api/trade/trades/T99999", json={"memo": "x"}).status_code == 404

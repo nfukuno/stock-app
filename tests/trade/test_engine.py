@@ -168,3 +168,33 @@ def test_roadmap():
     rm = e.roadmap(e.stats(acct["trades"]), acct["initial_cash"])
     assert rm[0]["ready"] and [x["value"] for x in rm[0]["conditions"]] == [30, 10, 1.0]
     assert rm[-1]["conditions"] == [] and not rm[-1]["ready"]
+
+
+def test_edit_trade_recomputes_and_keeps_history():
+    acct = e.new_account(NOW)
+    p = opened(acct, symbol="7974.T", price=8803, stop=8790, margin_type="day")
+    t = e.close_position(acct, p["id"], 100, 8785, jst(2026, 10, 19, 10, 11), jst(2026, 10, 19, 10, 11))
+    assert t["net_pnl"] == -1800 and t["beyond_stop"] is True
+    e.edit_trade(acct, t["id"], {"close_price": 8870, "memo": "寄り後の押し目"}, jst(2026, 10, 19, 20, 0))
+    assert t["net_pnl"] == 6700 and t["r_multiple"] == pytest.approx(5.15) and t["beyond_stop"] is False
+    assert e.cash_balance(acct) == 5_006_700 and t["memo"] == "寄り後の押し目"
+    assert t["edits"][0]["changes"]["close_price"] == [8785, 8870]
+    e.edit_trade(acct, t["id"], {"close_price": 8870}, jst(2026, 10, 19, 20, 1))          # 変更なし → 履歴を増やさない
+    assert len(t["edits"]) == 1
+    with pytest.raises(e.TradeError, match="損切り"):
+        e.edit_trade(acct, t["id"], {"stop": 8900}, NOW)
+    with pytest.raises(e.TradeError, match="変更できない"):
+        e.edit_trade(acct, t["id"], {"qty": 200}, NOW)
+    with pytest.raises(e.TradeError):
+        e.edit_trade(acct, "T99999", {"memo": "x"}, NOW)
+
+
+def test_edit_position():
+    acct = e.new_account(NOW)
+    p = opened(acct, stop=990)
+    e.edit_position(acct, p["id"], {"memo": "後から追記", "tags": ["ブレイク"], "emotion": "焦り", "stop": None}, NOW)
+    assert p["memo"] == "後から追記" and p["stop"] is None and p["edits"]
+    with pytest.raises(e.TradeError, match="変更できない"):
+        e.edit_position(acct, p["id"], {"close_price": 1}, NOW)
+    t = e.close_position(acct, p["id"], 100, 1010, jst(2026, 10, 19, 11, 0), jst(2026, 10, 19, 11, 0))
+    assert t["memo"] == "後から追記" and t["r_multiple"] is None

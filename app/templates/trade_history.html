@@ -27,6 +27,7 @@
     <tbody id="trades"></tbody>
   </table></div>
 </div>
-<script>window.TRADE = {labels: {{ margin_types | tojson }}};</script>
+<script>window.TRADE = {labels: {{ margin_types | tojson }}, tags: {{ tags | tojson }}, emotions: {{ emotions | tojson }}, memo_max: {{ memo_max }}};</script>
+<script src="/static/js/trade_edit.js?v={{ v }}"></script>
 <script src="/static/js/trade_history.js?v={{ v }}"></script>
 {% endblock %}

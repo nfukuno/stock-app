@@ -11,7 +11,7 @@ from app.forecast import config as fconfig
 from app.forecast import market
 from app.forecast.routes import resolve_name
 from . import config, engine, store as tstore
-from .models import CloseGroupIn, CloseIn, OpenIn, ResetIn
+from .models import CloseGroupIn, CloseIn, EditIn, OpenIn, ResetIn
 
 router = APIRouter()
 templates = Jinja2Templates(directory=str(fconfig.TEMPLATES_DIR))
@@ -92,7 +92,7 @@ def _err(e: engine.TradeError):
 def _static_version() -> int:
     """JS のキャッシュ対策。更新時刻をクエリに付けて、変更後は必ず読み直させる。"""
     js = fconfig.STATIC_DIR / "js"
-    return int(max((js / f).stat().st_mtime for f in ("trade.js", "trade_history.js")))
+    return int(max((js / f).stat().st_mtime for f in ("trade.js", "trade_history.js", "trade_edit.js")))
 
 
 def _ctx() -> dict:
@@ -165,6 +165,32 @@ def api_close_group(body: CloseGroupIn):
     net = sum(t["net_pnl"] for t in trades)
     _save(store, acct, f"close {','.join(t['id'] for t in trades)} {trades[0]['symbol']} {body.qty}@{body.price} {net:+,}")
     return {"trades": trades, "account": _view(acct)}
+
+
+@router.patch("/api/trade/positions/{position_id}")
+def api_edit_position(position_id: str, body: EditIn):
+    """建玉の修正・追記（建値の打ち間違い、損切り / 利確、メモ・タグ・感情の後入力）。"""
+    store = tstore.get_store()
+    acct = _load(store)
+    try:
+        pos = engine.edit_position(acct, position_id, body.changes(), market.now_jst())
+    except engine.TradeError as e:
+        raise _err(e)
+    _save(store, acct, f"edit {position_id}")
+    return {"position": pos, "account": _view(acct)}
+
+
+@router.patch("/api/trade/trades/{trade_id}")
+def api_edit_trade(trade_id: str, body: EditIn):
+    """返済済み約定の修正・追記。価格を直すと損益・R・金利を再計算する。"""
+    store = tstore.get_store()
+    acct = _load(store)
+    try:
+        tr = engine.edit_trade(acct, trade_id, body.changes(), market.now_jst())
+    except engine.TradeError as e:
+        raise _err(e)
+    _save(store, acct, f"edit {trade_id} net {tr['net_pnl']:+,}")
+    return {"trade": tr, "account": _view(acct)}
 
 
 @router.post("/api/trade/reset")

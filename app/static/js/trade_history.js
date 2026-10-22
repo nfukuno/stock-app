@@ -35,6 +35,14 @@
       }).join('') : '<tr><td colspan="5" class="muted">-</td></tr>') + '</tbody></table></div>';
   }
 
+  var items = {};
+
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest('[data-edit]');
+    if (b && items[b.dataset.edit]) TradeEdit.open('trade', items[b.dataset.edit], load);
+  });
+
+  function load() {
   fetch('/api/trade/trades').then(function (r) {
     return r.text().then(function (t) {
       var j; try { j = JSON.parse(t); } catch (e) { throw new Error(t || r.statusText); }
@@ -68,8 +76,10 @@
       group('ナンピン・増し玉別（追加した建玉）', s.by_add_type), group('ナンピンした建玉群とそれ以外', s.by_nanpin_group),
       group('感情別', s.by_emotion), group('売買別', s.by_side), group('信用区分別', s.by_margin_type), group('銘柄別', s.by_symbol),
     ].join('');
+    items = {};
     $('trades').innerHTML = j.trades.length ? j.trades.map(function (t) {
-      return '<tr><td>' + t.id + '</td><td>' + dt(t.opened_at) + ' → ' + dt(t.closed_at) + '</td><td>' + esc(t.symbol) + ' ' + esc(t.name) + '</td>' +
+      items[t.id] = t;
+      return '<tr><td>' + t.id + '<br>' + TradeEdit.button(t.id) + '</td><td>' + dt(t.opened_at) + ' → ' + dt(t.closed_at) + '</td><td>' + esc(t.symbol) + ' ' + esc(t.name) + '</td>' +
         '<td>' + esc(window.TRADE.labels[t.margin_type].label) + '</td><td class="' + t.side + '">' + (t.side === 'long' ? '買' : '売') + '</td>' +
         '<td class="num">' + yen(t.qty) + '</td><td class="num">' + t.open_price + ' → ' + t.close_price + '</td>' +
         '<td class="num ' + cls(t.net_pnl) + '">' + signed(t.net_pnl) + '</td><td class="num">' + yen(t.carry_cost) + '</td>' +
@@ -77,8 +87,12 @@
         '<td>' + esc((t.tags || []).join('・')) + (t.emotion ? ' / ' + esc(t.emotion) : '') +
         (t.exit_reason !== 'manual' ? ' <span class="badge late">強制返済</span>' : '') +
         (t.beyond_stop ? ' <span class="badge warn">損切り超え</span>' : '') +
-        (t.add_type === 'nanpin' ? ' <span class="badge warn">ナンピン</span>' : t.add_type === 'pyramid' ? ' <span class="badge">増し玉</span>' : '') + '</td>' +
+        (t.add_type === 'nanpin' ? ' <span class="badge warn">ナンピン</span>' : t.add_type === 'pyramid' ? ' <span class="badge">増し玉</span>' : '') +
+        TradeEdit.badge(t) + '</td>' +
         '<td class="wrap">' + esc(t.memo) + (t.exit_memo ? '<br><span class="muted">' + esc(t.exit_memo) + '</span>' : '') + '</td></tr>';
     }).join('') : '<tr><td colspan="12" class="muted">まだ返済した取引がありません</td></tr>';
   }).catch(function (e) { $('kpis').textContent = '読み込みに失敗しました: ' + e.message; });
+  }
+
+  load();
 })();
