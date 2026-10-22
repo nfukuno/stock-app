@@ -3,29 +3,42 @@
   "id": "20261021-154811",
   "created_at": "2026-10-21T15:48:11+09:00",
   "initial_cash": 5000000,
-  "seq": 1,
-  "positions": [
+  "seq": 2,
+  "positions": [],
+  "trades": [
     {
-      "id": "P00001",
+      "id": "T00002",
+      "position_id": "P00001",
       "symbol": "285A.T",
       "name": "KIOXIA HOLDINGS CORPORATION",
       "margin_type": "day",
       "side": "long",
       "qty": 100,
-      "initial_qty": 100,
       "open_price": 13570.0,
+      "close_price": 13510.0,
       "opened_at": "2026-10-22T09:15:10+09:00",
+      "closed_at": "2026-10-22T09:17:50+09:00",
       "open_date": "2026-10-22",
-      "entered_at": "2026-10-22T09:15:10+09:00",
-      "expiry_date": "2026-10-22",
+      "close_date": "2026-10-22",
+      "entered_at": "2026-10-22T09:17:50+09:00",
+      "holding_minutes": 2,
+      "gross_pnl": -6000,
+      "carry_cost": 0,
+      "carry_days": 0,
+      "commission": 0,
+      "net_pnl": -6000,
       "stop": 13510.0,
       "target": 13670.0,
+      "r_multiple": -1.0,
+      "planned_rr": 1.67,
+      "beyond_stop": false,
       "tags": [
         "逆張り"
       ],
       "emotion": "焦り",
-      "memo": ""
+      "memo": "",
+      "exit_memo": "損切",
+      "exit_reason": "manual"
     }
-  ],
-  "trades": []
+  ]
 }
