@@ -3,7 +3,7 @@
   "id": "20261021-154811",
   "created_at": "2026-10-21T15:48:11+09:00",
   "initial_cash": 5000000,
-  "seq": 4,
+  "seq": 5,
   "positions": [
     {
       "id": "P00003",
@@ -21,27 +21,6 @@
       "stop": 8788.0,
       "target": null,
       "tags": [],
-      "emotion": "",
-      "memo": ""
-    },
-    {
-      "id": "P00004",
-      "symbol": "7974.T",
-      "name": "NINTENDO CO LTD",
-      "margin_type": "day",
-      "side": "long",
-      "qty": 100,
-      "initial_qty": 100,
-      "open_price": 8828.0,
-      "opened_at": "2026-10-22T09:21:21+09:00",
-      "open_date": "2026-10-22",
-      "entered_at": "2026-10-22T09:21:21+09:00",
-      "expiry_date": "2026-10-22",
-      "stop": 8809.0,
-      "target": null,
-      "tags": [
-        "トレンドフォロー"
-      ],
       "emotion": "",
       "memo": ""
     }
@@ -79,6 +58,40 @@
       "emotion": "焦り",
       "memo": "",
       "exit_memo": "損切",
+      "exit_reason": "manual"
+    },
+    {
+      "id": "T00005",
+      "position_id": "P00004",
+      "symbol": "7974.T",
+      "name": "NINTENDO CO LTD",
+      "margin_type": "day",
+      "side": "long",
+      "qty": 100,
+      "open_price": 8828.0,
+      "close_price": 8859.0,
+      "opened_at": "2026-10-22T09:21:21+09:00",
+      "closed_at": "2026-10-22T09:26:47+09:00",
+      "open_date": "2026-10-22",
+      "close_date": "2026-10-22",
+      "entered_at": "2026-10-22T09:26:47+09:00",
+      "holding_minutes": 5,
+      "gross_pnl": 3100,
+      "carry_cost": 0,
+      "carry_days": 0,
+      "commission": 0,
+      "net_pnl": 3100,
+      "stop": 8809.0,
+      "target": null,
+      "r_multiple": 1.63,
+      "planned_rr": null,
+      "beyond_stop": false,
+      "tags": [
+        "トレンドフォロー"
+      ],
+      "emotion": "",
+      "memo": "",
+      "exit_memo": "利確",
       "exit_reason": "manual"
     }
   ]
