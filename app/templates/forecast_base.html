@@ -20,7 +20,16 @@
   button:disabled { background:#aab; cursor:not-allowed; }
   input, select, textarea { font:inherit; padding:6px 8px; border:1px solid var(--line); border-radius:6px; }
   .badge { display:inline-block; padding:1px 8px; border-radius:10px; font-size:12px; background:#eef1f8; }
-  .badge.late { background:#fff1d6; } .badge.ok { background:#dff5e8; } .badge.pending { background:#eef1f8; }
+  .badge.warn { background:#ffe1df; } .badge.late { background:#fff1d6; } .badge.ok { background:#dff5e8; } .badge.pending { background:#eef1f8; }
+  dialog.editdlg { border:1px solid var(--line); border-radius:12px; padding:16px 18px; width:min(640px, calc(100vw - 32px)); }
+  dialog.editdlg::backdrop { background:rgba(20,24,40,.35); }
+  .editdlg h2 { font-size:15px; } .editdlg .egrid { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:8px 12px; }
+  .editdlg label { display:flex; flex-direction:column; gap:4px; font-size:12px; color:var(--muted); }
+  .editdlg label.blk { margin-top:10px; } .editdlg .chips { display:flex; flex-wrap:wrap; gap:6px; }
+  .editdlg .chips label { flex-direction:row; align-items:center; color:var(--fg); font-size:13px; }
+  .editdlg .emsg { min-height:1.2em; margin:4px 0; }
+  button.editbtn { background:transparent; color:var(--accent); border:1px solid var(--line); padding:2px 8px; font-size:12px; border-radius:6px; }
+  .memo-line { font-size:12px; color:var(--muted); max-width:260px; white-space:normal; }
 </style>
 {% block head %}{% endblock %}
 </head>
@@ -28,6 +37,8 @@
 <header class="nav">
   <a href="/forecast" class="{{ 'active' if nav == 'index' }}">日足予想</a>
   <a href="/forecast/dashboard" class="{{ 'active' if nav == 'dashboard' }}">成績ダッシュボード</a>
+  <a href="/trade" class="{{ 'active' if nav == 'trade' }}">トレード口座</a>
+  <a href="/trade/history" class="{{ 'active' if nav == 'trade_history' }}">トレード分析</a>
   <a href="/" class="muted">ドローダウン一覧</a>
 </header>
 <main>{% block body %}{% endblock %}</main>
