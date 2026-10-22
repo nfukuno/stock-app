@@ -36,9 +36,20 @@
         "逆張り"
       ],
       "emotion": "焦り",
-      "memo": "",
+      "memo": "FVGの上あたりでエントリー、損切もFVGの終わりで判断",
       "exit_memo": "損切",
-      "exit_reason": "manual"
+      "exit_reason": "manual",
+      "edits": [
+        {
+          "at": "2026-10-22T09:52:56+09:00",
+          "changes": {
+            "memo": [
+              "",
+              "FVGの上あたりでエントリー、損切もFVGの終わりで判断"
+            ]
+          }
+        }
+      ]
     },
     {
       "id": "T00005",
