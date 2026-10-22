@@ -67,12 +67,33 @@
       "planned_rr": null,
       "beyond_stop": false,
       "tags": [
+        "ブレイク",
         "トレンドフォロー"
       ],
       "emotion": "",
-      "memo": "",
+      "memo": "トレンドにいたので買い増ししてみた",
       "exit_memo": "利確",
-      "exit_reason": "manual"
+      "exit_reason": "manual",
+      "edits": [
+        {
+          "at": "2026-10-22T09:50:02+09:00",
+          "changes": {
+            "tags": [
+              [
+                "トレンドフォロー"
+              ],
+              [
+                "ブレイク",
+                "トレンドフォロー"
+              ]
+            ],
+            "memo": [
+              "",
+              "トレンドにいたので買い増ししてみた"
+            ]
+          }
+        }
+      ]
     },
     {
       "id": "T00006",
