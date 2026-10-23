@@ -230,7 +230,7 @@
       "tags": [],
       "emotion": "",
       "memo": "",
-      "exit_memo": "損切",
+      "exit_memo": "損切\n1分足が十字陽線だったので撤退",
       "exit_reason": "manual",
       "add_type": null,
       "nanpin_group": false,
@@ -240,7 +240,18 @@
       "net_pnl": -1500,
       "r_multiple": -0.14,
       "planned_rr": null,
-      "beyond_stop": false
+      "beyond_stop": false,
+      "edits": [
+        {
+          "at": "2026-10-23T09:39:52+09:00",
+          "changes": {
+            "exit_memo": [
+              "損切",
+              "損切\n1分足が十字陽線だったので撤退"
+            ]
+          }
+        }
+      ]
     }
   ]
 }
