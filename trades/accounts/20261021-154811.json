@@ -3,8 +3,30 @@
   "id": "20261021-154811",
   "created_at": "2026-10-21T15:48:11+09:00",
   "initial_cash": 5000000,
-  "seq": 26,
-  "positions": [],
+  "seq": 27,
+  "positions": [
+    {
+      "id": "P00027",
+      "symbol": "285A.T",
+      "name": "KIOXIA HOLDINGS CORPORATION",
+      "margin_type": "day",
+      "side": "long",
+      "qty": 100,
+      "initial_qty": 100,
+      "open_price": 12275.0,
+      "opened_at": "2026-10-23T09:55:28+09:00",
+      "open_date": "2026-10-23",
+      "entered_at": "2026-10-23T17:31:46+09:00",
+      "expiry_date": "2026-10-23",
+      "stop": 12150.0,
+      "target": null,
+      "tags": [],
+      "emotion": "",
+      "memo": "",
+      "add_type": null,
+      "nanpin_group": false
+    }
+  ],
   "trades": [
     {
       "id": "T00002",
