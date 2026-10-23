@@ -3,32 +3,8 @@
   "id": "20261021-154811",
   "created_at": "2026-10-21T15:48:11+09:00",
   "initial_cash": 5000000,
-  "seq": 29,
-  "positions": [
-    {
-      "id": "P00029",
-      "symbol": "5803.T",
-      "name": "FUJIKURA",
-      "margin_type": "day",
-      "side": "long",
-      "qty": 100,
-      "initial_qty": 100,
-      "open_price": 3836.0,
-      "opened_at": "2026-10-23T09:30:22+09:00",
-      "open_date": "2026-10-23",
-      "entered_at": "2026-10-23T21:36:18+09:00",
-      "expiry_date": "2026-10-23",
-      "stop": 3794.0,
-      "target": null,
-      "tags": [
-        "トレンドフォロー"
-      ],
-      "emotion": "",
-      "memo": "",
-      "add_type": null,
-      "nanpin_group": false
-    }
-  ],
+  "seq": 30,
+  "positions": [],
   "trades": [
     {
       "id": "T00002",
@@ -701,6 +677,42 @@
       "net_pnl": -12500,
       "r_multiple": -1.0,
       "planned_rr": 2.12,
+      "beyond_stop": false
+    },
+    {
+      "id": "T00030",
+      "position_id": "P00029",
+      "symbol": "5803.T",
+      "name": "FUJIKURA",
+      "margin_type": "day",
+      "side": "long",
+      "qty": 100,
+      "open_price": 3836.0,
+      "close_price": 3884.0,
+      "opened_at": "2026-10-23T09:30:22+09:00",
+      "closed_at": "2026-10-23T09:34:33+09:00",
+      "open_date": "2026-10-23",
+      "close_date": "2026-10-23",
+      "entered_at": "2026-10-23T21:36:50+09:00",
+      "holding_minutes": 4,
+      "commission": 0,
+      "stop": 3794.0,
+      "target": null,
+      "tags": [
+        "トレンドフォロー"
+      ],
+      "emotion": "",
+      "memo": "",
+      "exit_memo": "利確",
+      "exit_reason": "manual",
+      "add_type": null,
+      "nanpin_group": false,
+      "gross_pnl": 4800,
+      "carry_cost": 0,
+      "carry_days": 0,
+      "net_pnl": 4800,
+      "r_multiple": 1.14,
+      "planned_rr": null,
       "beyond_stop": false
     }
   ]
