@@ -398,7 +398,7 @@
       "side": "long",
       "qty": 100,
       "open_price": 2838.0,
-      "close_price": 2894.5,
+      "close_price": 2817.5,
       "opened_at": "2026-10-23T09:48:00+09:00",
       "closed_at": "2026-10-23T15:30:00+09:00",
       "open_date": "2026-10-23",
@@ -413,17 +413,32 @@
       ],
       "emotion": "",
       "memo": "",
-      "exit_memo": "大引けで強制返済",
+      "exit_memo": "FVG切損切",
       "exit_reason": "day_close",
       "add_type": null,
       "nanpin_group": false,
-      "gross_pnl": 5650,
+      "gross_pnl": -2050,
       "carry_cost": 0,
       "carry_days": 0,
-      "net_pnl": 5650,
-      "r_multiple": 3.77,
+      "net_pnl": -2050,
+      "r_multiple": -1.37,
       "planned_rr": null,
-      "beyond_stop": false
+      "beyond_stop": true,
+      "edits": [
+        {
+          "at": "2026-10-23T16:23:37+09:00",
+          "changes": {
+            "close_price": [
+              2894.5,
+              2817.5
+            ],
+            "exit_memo": [
+              "大引けで強制返済",
+              "FVG切損切"
+            ]
+          }
+        }
+      ]
     }
   ]
 }
