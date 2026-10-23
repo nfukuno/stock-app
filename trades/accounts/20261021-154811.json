@@ -640,7 +640,7 @@
       "holding_minutes": 16,
       "commission": 0,
       "stop": 11530.0,
-      "target": null,
+      "target": 12540.0,
       "tags": [],
       "emotion": "",
       "memo": "",
@@ -653,8 +653,19 @@
       "carry_days": 0,
       "net_pnl": 27500,
       "r_multiple": 1.15,
-      "planned_rr": null,
-      "beyond_stop": false
+      "planned_rr": 3.21,
+      "beyond_stop": false,
+      "edits": [
+        {
+          "at": "2026-10-23T17:32:07+09:00",
+          "changes": {
+            "target": [
+              null,
+              12540.0
+            ]
+          }
+        }
+      ]
     }
   ]
 }
