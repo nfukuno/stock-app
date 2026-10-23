@@ -18,13 +18,32 @@
       "open_date": "2026-10-23",
       "entered_at": "2026-10-23T09:19:23+09:00",
       "expiry_date": "2026-10-23",
-      "stop": null,
-      "target": null,
+      "stop": 8850.0,
+      "target": 8870.0,
       "tags": [],
-      "emotion": "",
+      "emotion": "迷い",
       "memo": "",
       "add_type": null,
-      "nanpin_group": false
+      "nanpin_group": false,
+      "edits": [
+        {
+          "at": "2026-10-23T09:20:04+09:00",
+          "changes": {
+            "stop": [
+              null,
+              8850.0
+            ],
+            "target": [
+              null,
+              8870.0
+            ],
+            "emotion": [
+              "",
+              "迷い"
+            ]
+          }
+        }
+      ]
     }
   ],
   "trades": [
