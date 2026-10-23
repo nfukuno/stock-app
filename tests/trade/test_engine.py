@@ -237,3 +237,19 @@ def test_edit_times():
     q = opened(acct)                                                                # 制度: 建日時を直すと期日も変わる
     e.edit_position(acct, q["id"], {"opened_at": jst(2026, 10, 16, 9, 30)}, later)
     assert q["open_date"] == "2026-10-16" and q["expiry_date"] == "2027-04-16"
+
+
+def test_exit_type_stats():
+    acct = e.new_account(NOW)
+    at = jst(2026, 10, 19, 11, 0)
+    for px, et in [(1020, "plan_target"), (989, "plan_stop"), (1005, "board_exit"), (1003, "board_exit"), (1000, "")]:
+        p = opened(acct, margin_type="day")
+        e.close_position(acct, p["id"], 100, px, at, at, exit_type=et)
+    st = e.stats(acct["trades"])
+    g = {x["key"]: x for x in st["by_exit_type"]}
+    assert [x["key"] for x in st["by_exit_type"]] == ["計画どおり損切り", "計画どおり利確", "板で早期撤退", "未分類"]
+    assert g["板で早期撤退"]["n"] == 2 and g["板で早期撤退"]["avg_r"] == pytest.approx(0.4)
+    assert st["unclassified_exits"] == 1
+    t = acct["trades"][-1]
+    e.edit_trade(acct, t["id"], {"exit_type": "breakeven"}, at)
+    assert e.exit_type_label(t) == "建値撤退" and e.stats(acct["trades"])["unclassified_exits"] == 0

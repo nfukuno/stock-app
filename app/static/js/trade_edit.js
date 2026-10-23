@@ -24,6 +24,8 @@ window.TradeEdit = (function () {
       T.tags.map(function (t) { return '<label><input type="checkbox" name="tags" value="' + esc(t) + '">' + esc(t) + '</label>'; }).join('') +
       '</div>' +
       '<label class="blk">メモ（根拠・シナリオ・振り返り）<textarea name="memo" rows="4" maxlength="' + T.memo_max + '"></textarea></label>' +
+      '<label class="blk only-trade">決済理由<select name="exit_type"><option value="">未分類</option>' +
+      Object.keys(T.exit_types).map(function (k) { return '<option value="' + k + '">' + esc(T.exit_types[k]) + '</option>'; }).join('') + '</select></label>' +
       '<label class="blk only-trade">決済メモ<textarea name="exit_memo" rows="2" maxlength="' + T.memo_max + '"></textarea></label>' +
       '<p class="muted" style="font-size:12px">価格・日時を直すと損益・R・金利・保有時間を再計算します。強制返済の返済日時を直すと「自分で返済」扱いになります。修正した内容は履歴として残ります。</p>' +
       '<div class="emsg neg"></div>' +
@@ -49,7 +51,7 @@ window.TradeEdit = (function () {
       emotion: form.emotion.value, memo: form.memo.value,
       tags: Array.prototype.filter.call(form.querySelectorAll('[name=tags]'), function (x) { return x.checked; }).map(function (x) { return x.value; }),
     };
-    if (trade) { b.close_price = num(form.close_price.value); b.exit_memo = form.exit_memo.value; }
+    if (trade) { b.close_price = num(form.close_price.value); b.exit_memo = form.exit_memo.value; b.exit_type = form.exit_type.value; }
     // 日時は変えたときだけ送る（秒まで比較）
     if (form.opened_at.value && !same(form.opened_at.value, cur.obj.opened_at)) b.opened_at = form.opened_at.value;
     if (trade && form.closed_at.value && !same(form.closed_at.value, cur.obj.closed_at)) b.closed_at = form.closed_at.value;
@@ -88,6 +90,7 @@ window.TradeEdit = (function () {
     form.emotion.value = obj.emotion || '';
     form.memo.value = obj.memo || '';
     form.exit_memo.value = trade ? (obj.exit_memo || '') : '';
+    form.exit_type.value = trade ? (obj.exit_type || '') : '';
     Array.prototype.forEach.call(form.querySelectorAll('[name=tags]'), function (x) { x.checked = (obj.tags || []).indexOf(x.value) >= 0; });
     dlg.querySelector('.emsg').textContent = '';
     dlg.showModal();

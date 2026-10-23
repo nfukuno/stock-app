@@ -28,11 +28,12 @@
 
   function group(title, rows) {
     return '<div class="card"><h2>' + title + '</h2><table><thead><tr><th></th><th class="num">件数</th><th class="num">勝率</th>' +
-      '<th class="num">損益合計</th><th class="num">平均</th></tr></thead><tbody>' +
+      '<th class="num">損益合計</th><th class="num">平均</th><th class="num">平均R</th></tr></thead><tbody>' +
       (rows.length ? rows.map(function (r) {
         return '<tr><td>' + esc(r.key) + '</td><td class="num">' + r.n + '</td><td class="num">' + pct(r.win_rate) + '</td>' +
-          '<td class="num ' + cls(r.total) + '">' + signed(r.total) + '</td><td class="num ' + cls(r.avg) + '">' + signed(r.avg) + '</td></tr>';
-      }).join('') : '<tr><td colspan="5" class="muted">-</td></tr>') + '</tbody></table></div>';
+          '<td class="num ' + cls(r.total) + '">' + signed(r.total) + '</td><td class="num ' + cls(r.avg) + '">' + signed(r.avg) + '</td>' +
+          '<td class="num ' + cls(r.avg_r) + '">' + (r.avg_r == null ? '-' : r.avg_r.toFixed(2)) + '</td></tr>';
+      }).join('') : '<tr><td colspan="6" class="muted">-</td></tr>') + '</tbody></table></div>';
   }
 
   var items = {};
@@ -66,13 +67,14 @@
       ['損切り設定率', pct(s.stop_set_rate)],
       ['損切りライン超えの決済', s.beyond_stop + '件', s.beyond_stop ? 'neg' : ''],
       ['ナンピン', s.nanpin_count + '回', s.nanpin_count ? 'neg' : ''],
+      ['決済理由が未分類', s.unclassified_exits + '件', s.unclassified_exits ? 'neg' : ''],
     ];
     $('kpis').innerHTML = k.map(function (x) {
       return '<div class="kpi"><div class="l">' + x[0] + '</div><div class="v ' + (x[2] || '') + '">' + x[1] + '</div></div>';
     }).join('');
     $('curve').innerHTML = curve(s.curve);
     $('groups').innerHTML = [
-      group('エントリー理由別', s.by_tag), group('時間帯別（建てた時刻）', s.by_hour), group('曜日別', s.by_weekday),
+      group('決済理由別', s.by_exit_type), group('エントリー理由別', s.by_tag), group('時間帯別（建てた時刻）', s.by_hour), group('曜日別', s.by_weekday),
       group('ナンピン・増し玉別（追加した建玉）', s.by_add_type), group('ナンピンした建玉群とそれ以外', s.by_nanpin_group),
       group('感情別', s.by_emotion), group('売買別', s.by_side), group('信用区分別', s.by_margin_type), group('銘柄別', s.by_symbol),
     ].join('');
@@ -85,7 +87,8 @@
         '<td class="num ' + cls(t.net_pnl) + '">' + signed(t.net_pnl) + '</td><td class="num">' + yen(t.carry_cost) + '</td>' +
         '<td class="num">' + (t.r_multiple == null ? '-' : t.r_multiple.toFixed(2)) + '</td>' +
         '<td>' + esc((t.tags || []).join('・')) + (t.emotion ? ' / ' + esc(t.emotion) : '') +
-        (t.exit_reason !== 'manual' ? ' <span class="badge late">強制返済</span>' : '') +
+        (t.exit_reason !== 'manual' ? ' <span class="badge late">強制返済</span>'
+          : t.exit_type ? ' <span class="badge">' + esc(window.TRADE.exit_types[t.exit_type]) + '</span>' : ' <span class="badge warn">決済理由未分類</span>') +
         (t.beyond_stop ? ' <span class="badge warn">損切り超え</span>' : '') +
         (t.add_type === 'nanpin' ? ' <span class="badge warn">ナンピン</span>' : t.add_type === 'pyramid' ? ' <span class="badge">増し玉</span>' : '') +
         TradeEdit.badge(t) + '</td>' +

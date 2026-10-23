@@ -76,6 +76,14 @@ class CloseIn(BaseModel):
     price: float = Field(gt=0)
     executed_at: datetime | None = None
     memo: str = Field(default="", max_length=c.MEMO_MAX)
+    exit_type: str = ""                         # config.EXIT_TYPES のキー（空 = 未分類）
+
+    @field_validator("exit_type")
+    @classmethod
+    def _exit_type(cls, v):
+        if v and v not in c.EXIT_TYPES:
+            raise ValueError(f"決済理由は {list(c.EXIT_TYPES)} のいずれか")
+        return v
 
     @field_validator("executed_at", mode="before")
     @classmethod
@@ -96,6 +104,14 @@ class CloseGroupIn(BaseModel):
     price: float = Field(gt=0)
     executed_at: datetime | None = None
     memo: str = Field(default="", max_length=c.MEMO_MAX)
+    exit_type: str = ""                         # config.EXIT_TYPES のキー（空 = 未分類）
+
+    @field_validator("exit_type")
+    @classmethod
+    def _exit_type(cls, v):
+        if v and v not in c.EXIT_TYPES:
+            raise ValueError(f"決済理由は {list(c.EXIT_TYPES)} のいずれか")
+        return v
 
     @field_validator("executed_at", mode="before")
     @classmethod
@@ -122,6 +138,14 @@ class EditIn(BaseModel):
     exit_memo: str | None = Field(default=None, max_length=c.MEMO_MAX)
     opened_at: datetime | None = None
     closed_at: datetime | None = None
+    exit_type: str | None = None
+
+    @field_validator("exit_type")
+    @classmethod
+    def _exit_type(cls, v):
+        if v and v not in c.EXIT_TYPES:
+            raise ValueError(f"決済理由は {list(c.EXIT_TYPES)} のいずれか")
+        return v
 
     @field_validator("opened_at", "closed_at", mode="before")
     @classmethod
@@ -140,7 +164,7 @@ class EditIn(BaseModel):
 
     def changes(self) -> dict:
         d = self.model_dump(exclude_unset=True)
-        for k in ("open_price", "close_price", "tags", "emotion", "memo", "exit_memo", "opened_at", "closed_at"):
+        for k in ("open_price", "close_price", "tags", "emotion", "memo", "exit_memo", "opened_at", "closed_at", "exit_type"):
             if k in d and d[k] is None:
                 del d[k]                       # 必須項目は null なら変更しない
         return d

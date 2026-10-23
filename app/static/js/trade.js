@@ -30,7 +30,9 @@
       '<input name="qty" type="number" min="' + T.lot + '" step="' + T.lot + '" max="' + qty + '" value="' + qty + '" title="株数">' +
       '<input name="price" type="number" step="0.1" min="0.1" placeholder="返済価格" value="' + (last || '') + '" required>' +
       '<input name="executed_at" type="datetime-local" step="1" title="空欄 = 今" style="width:180px">' +
-      '<input name="memo" placeholder="決済理由" style="width:140px">' +
+      '<select name="exit_type" title="決済理由"><option value="">決済理由（未分類）</option>' +
+      Object.keys(T.exit_types).map(function (k) { return '<option value="' + k + '">' + esc(T.exit_types[k]) + '</option>'; }).join('') + '</select>' +
+      '<input name="memo" placeholder="決済メモ" style="width:140px">' +
       '<button type="submit">' + label + '</button></form>';
   }
 
@@ -117,7 +119,8 @@
     renderRoadmap(a.roadmap);
 
     $('today').innerHTML = a.today_trades.length ? a.today_trades.map(function (t) {
-      var reason = t.exit_reason === 'manual' ? esc(t.exit_memo) : '<span class="badge late">強制返済</span>';
+      var reason = t.exit_reason !== 'manual' ? '<span class="badge late">強制返済</span>'
+        : (t.exit_type ? '<span class="badge">' + esc(T.exit_types[t.exit_type]) + '</span> ' : '<span class="badge warn">未分類</span> ') + esc(t.exit_memo);
       items[t.id] = { kind: 'trade', obj: t };
       return '<tr><td>' + t.id + '<br>' + TradeEdit.button(t.id) + '</td><td>' + esc(t.symbol) + ' ' + esc(t.name) + TradeEdit.badge(t) + '</td>' +
         '<td class="' + t.side + '">' + (t.side === 'long' ? '買' : '売') + '</td><td class="num">' + yen(t.qty) + '</td>' +
@@ -180,7 +183,7 @@
   $('positions').addEventListener('submit', function (e) {
     e.preventDefault();
     var f = e.target;
-    var b = { qty: +f.qty.value, price: +f.price.value, executed_at: f.executed_at.value || null, memo: f.memo.value };
+    var b = { qty: +f.qty.value, price: +f.price.value, executed_at: f.executed_at.value || null, memo: f.memo.value, exit_type: f.exit_type.value };
     var group = !!f.dataset.key;
     if (group) b.key = f.dataset.key; else b.position_id = f.dataset.id;
     f.querySelector('button').disabled = true;

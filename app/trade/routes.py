@@ -96,7 +96,7 @@ def _static_version() -> int:
 
 
 def _ctx() -> dict:
-    return {"margin_types": config.MARGIN_TYPES, "tags": config.TAGS, "emotions": config.EMOTIONS,
+    return {"margin_types": config.MARGIN_TYPES, "tags": config.TAGS, "emotions": config.EMOTIONS, "exit_types": config.EXIT_TYPES,
             "lot": config.LOT, "memo_max": config.MEMO_MAX, "v": _static_version()}
 
 
@@ -146,7 +146,8 @@ def api_close(body: CloseIn):
     acct = _load(store)
     now = market.now_jst()
     try:
-        tr = engine.close_position(acct, body.position_id, body.qty, body.price, _time(body.executed_at), now, body.memo)
+        tr = engine.close_position(acct, body.position_id, body.qty, body.price, _time(body.executed_at), now, body.memo,
+                                   exit_type=body.exit_type)
     except engine.TradeError as e:
         raise _err(e)
     _save(store, acct, f"close {tr['id']} {tr['symbol']} {tr['qty']}@{tr['close_price']} {tr['net_pnl']:+,}")
@@ -159,7 +160,8 @@ def api_close_group(body: CloseGroupIn):
     acct = _load(store)
     now = market.now_jst()
     try:
-        trades = engine.close_group(acct, body.key, body.qty, body.price, _time(body.executed_at), now, body.memo)
+        trades = engine.close_group(acct, body.key, body.qty, body.price, _time(body.executed_at), now, body.memo,
+                                    body.exit_type)
     except engine.TradeError as e:
         raise _err(e)
     net = sum(t["net_pnl"] for t in trades)

@@ -140,3 +140,16 @@ def test_edit_time_route(client):
     assert r.json()["trade"]["holding_minutes"] == 0
     r = client.patch(f"/api/trade/trades/{t['id']}", json={"closed_at": "2026-10-19T08:00"})
     assert r.status_code == 422 and "立会時間外" in r.json()["detail"]
+
+
+def test_exit_type_routes(client):
+    pid = client.post("/api/trade/open", json=open_body()).json()["position"]["id"]
+    bad = client.post("/api/trade/close", json={"position_id": pid, "qty": 100, "price": 1010, "exit_type": "nope"})
+    assert bad.status_code == 422
+    t = client.post("/api/trade/close", json={"position_id": pid, "qty": 100, "price": 1010,
+                                               "exit_type": "board_exit"}).json()["trade"]
+    assert t["exit_type"] == "board_exit"
+    r = client.patch(f"/api/trade/trades/{t['id']}", json={"exit_type": "plan_target"})
+    assert r.json()["trade"]["exit_type"] == "plan_target"
+    st = client.get("/api/trade/trades").json()["stats"]
+    assert st["by_exit_type"][0]["key"] == "計画どおり利確"
