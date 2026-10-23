@@ -500,7 +500,7 @@
       "side": "long",
       "qty": 100,
       "open_price": 2785.0,
-      "close_price": 2894.5,
+      "close_price": 2765.0,
       "opened_at": "2026-10-23T09:13:00+09:00",
       "closed_at": "2026-10-23T15:30:00+09:00",
       "open_date": "2026-10-23",
@@ -516,17 +516,32 @@
       ],
       "emotion": "",
       "memo": "",
-      "exit_memo": "大引けで強制返済",
+      "exit_memo": "前場引けで決済",
       "exit_reason": "day_close",
       "add_type": null,
       "nanpin_group": false,
-      "gross_pnl": 10950,
+      "gross_pnl": -2000,
       "carry_cost": 0,
       "carry_days": 0,
-      "net_pnl": 10950,
-      "r_multiple": 3.22,
+      "net_pnl": -2000,
+      "r_multiple": -0.59,
       "planned_rr": null,
-      "beyond_stop": false
+      "beyond_stop": false,
+      "edits": [
+        {
+          "at": "2026-10-23T16:31:29+09:00",
+          "changes": {
+            "close_price": [
+              2894.5,
+              2765.0
+            ],
+            "exit_memo": [
+              "大引けで強制返済",
+              "前場引けで決済"
+            ]
+          }
+        }
+      ]
     }
   ]
 }
