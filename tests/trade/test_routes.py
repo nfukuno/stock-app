@@ -130,3 +130,13 @@ def test_edit_routes(client):
     assert r.json()["trade"]["net_pnl"] == 3000 and r.json()["account"]["cash"] == 5_003_000
     assert client.patch(f"/api/trade/trades/{t['id']}", json={"tags": ["なにか"]}).status_code == 422
     assert client.patch("/api/trade/trades/T99999", json={"memo": "x"}).status_code == 404
+
+
+def test_edit_time_route(client):
+    pid = client.post("/api/trade/open", json=open_body()).json()["position"]["id"]
+    t = client.post("/api/trade/close", json={"position_id": pid, "qty": 100, "price": 1010}).json()["trade"]
+    r = client.patch(f"/api/trade/trades/{t['id']}", json={"closed_at": "2026-10-19T09:00", "opened_at": "2026-10-19T09:00"})
+    assert r.status_code == 200, r.text
+    assert r.json()["trade"]["holding_minutes"] == 0
+    r = client.patch(f"/api/trade/trades/{t['id']}", json={"closed_at": "2026-10-19T08:00"})
+    assert r.status_code == 422 and "立会時間外" in r.json()["detail"]

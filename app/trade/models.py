@@ -120,6 +120,13 @@ class EditIn(BaseModel):
     emotion: str | None = None
     memo: str | None = Field(default=None, max_length=c.MEMO_MAX)
     exit_memo: str | None = Field(default=None, max_length=c.MEMO_MAX)
+    opened_at: datetime | None = None
+    closed_at: datetime | None = None
+
+    @field_validator("opened_at", "closed_at", mode="before")
+    @classmethod
+    def _time(cls, v):
+        return _parse_time(v)
 
     @field_validator("tags")
     @classmethod
@@ -133,7 +140,7 @@ class EditIn(BaseModel):
 
     def changes(self) -> dict:
         d = self.model_dump(exclude_unset=True)
-        for k in ("open_price", "close_price", "tags", "emotion", "memo", "exit_memo"):
+        for k in ("open_price", "close_price", "tags", "emotion", "memo", "exit_memo", "opened_at", "closed_at"):
             if k in d and d[k] is None:
                 del d[k]                       # 必須項目は null なら変更しない
         return d

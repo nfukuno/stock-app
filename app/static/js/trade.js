@@ -92,7 +92,10 @@
     }).join('');
     var al = [];
     if (a.margin_call) al.push('追証が発生しています（維持率 20% 未満）。建玉を返済して維持率を回復してください。');
-    a.positions.forEach(function (p) { if (p.overdue) al.push(p.id + ' ' + p.symbol + ' は強制返済の対象です（終値の確定待ち）。'); });
+    a.positions.forEach(function (p) {
+      if (p.backdated) al.push(p.id + ' ' + p.symbol + ' は過去日の建玉です。返済を入力してください（返済日時は ' + p.expiry_date + ' の大引けまで）。');
+      else if (p.overdue) al.push(p.id + ' ' + p.symbol + ' は強制返済の対象です（終値の確定待ち）。');
+    });
     if (a.prices_stale) al.push('一部銘柄の現在値が取得できず、評価損益に含めていません。');
     $('alerts').innerHTML = al.map(function (t) { return '<div class="alert">' + esc(t) + '</div>'; }).join('');
     $('asof').textContent = '（' + hm(a.as_of) + ' 時点 / 口座 ' + a.account_id + '）';

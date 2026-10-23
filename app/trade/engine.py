@@ -195,8 +195,8 @@ def _derive(t: dict) -> None:
 
 
 # ---------------------------------------------------------------- 後からの修正・追記
-POSITION_FIELDS = {"open_price", "stop", "target", "tags", "emotion", "memo"}
-TRADE_FIELDS = POSITION_FIELDS | {"close_price", "exit_memo"}
+POSITION_FIELDS = {"open_price", "opened_at", "stop", "target", "tags", "emotion", "memo"}
+TRADE_FIELDS = POSITION_FIELDS | {"close_price", "closed_at", "exit_memo"}
 
 
 def _check_levels(side: str, price: float, stop: float | None, target: float | None) -> None:
@@ -221,11 +221,29 @@ def _apply_edit(obj: dict, changes: dict, allowed: set, now: datetime) -> dict:
     return diff
 
 
+def _times(changes: dict, now: datetime) -> dict:
+    """日時の変更を検証し、保存形式（JST の ISO 文字列）にそろえる。"""
+    out = dict(changes)
+    for k in ("opened_at", "closed_at"):
+        if k in out:
+            at = out[k].astimezone(JST)
+            _check_time(at, now)
+            out[k] = at.isoformat(timespec="seconds")
+    return out
+
+
+def _expiry_for(margin_type: str, open_date: date) -> date:
+    months = c.MARGIN_TYPES[margin_type]["expiry_months"]
+    return expiry_date(open_date, months) if months else open_date
+
+
 def edit_position(acct: dict, position_id: str, changes: dict, now: datetime) -> dict:
     pos = next((p for p in acct["positions"] if p["id"] == position_id), None)
     if pos is None:
         raise TradeError("建玉が見つかりません（すでに返済済みの可能性があります）", 404)
-    _apply_edit(pos, changes, POSITION_FIELDS, now)
+    if _apply_edit(pos, _times(changes, now), POSITION_FIELDS, now).get("opened_at"):
+        d = datetime.fromisoformat(pos["opened_at"]).date()
+        pos["open_date"], pos["expiry_date"] = d.isoformat(), _expiry_for(pos["margin_type"], d).isoformat()
     return pos
 
 
@@ -233,7 +251,21 @@ def edit_trade(acct: dict, trade_id: str, changes: dict, now: datetime) -> dict:
     t = next((t for t in acct["trades"] if t["id"] == trade_id), None)
     if t is None:
         raise TradeError("約定が見つかりません", 404)
-    if _apply_edit(t, changes, TRADE_FIELDS, now):
+    changes = _times(changes, now)
+    opened = datetime.fromisoformat(changes.get("opened_at", t["opened_at"]))
+    closed = datetime.fromisoformat(changes.get("closed_at", t["closed_at"]))
+    if closed < opened:
+        raise TradeError("返済日時が建日時より前です")
+    if closed.date() > _expiry_for(t["margin_type"], opened.date()):
+        raise TradeError("返済日時が返済期限を過ぎています（いちにち信用は建てた日のうちに返済）")
+    diff = _apply_edit(t, changes, TRADE_FIELDS, now)
+    if diff:
+        t["open_date"], t["close_date"] = opened.date().isoformat(), closed.date().isoformat()
+        t["holding_minutes"] = int((closed - opened).total_seconds() // 60)
+        if "closed_at" in diff and t["exit_reason"] != "manual":
+            # 強制返済の時刻を直した = 実際は自分で返済した。強制返済の扱いを外す
+            diff["exit_reason"] = [t["exit_reason"], "manual"]
+            t["exit_reason"] = "manual"
         _derive(t)
     return t
 
@@ -258,11 +290,12 @@ def close_group(acct: dict, key: str, qty: int, price: float, at: datetime, now:
 
 def apply_forced(acct: dict, now: datetime, close_price: Callable[[str, date], float | None]) -> list[dict]:
     """いちにち信用は建日の大引け、制度信用は期日の大引けで、その日の終値で強制返済する。
-    終値がまだ取れないものは残す（summary で overdue 表示）。"""
+    終値がまだ取れないものは残す（summary で overdue 表示）。
+    期限を過ぎてから入力した建玉（TradingView のリプレイなど過去日の練習）は自動返済せず、返済の入力を待つ。"""
     done = []
     for pos in list(acct["positions"]):
         due = date.fromisoformat(pos["expiry_date"])
-        if now < at_close(due):
+        if now < at_close(due) or is_backdated(pos):
             continue
         px = close_price(pos["symbol"], due)
         if px is None:
@@ -271,6 +304,11 @@ def apply_forced(acct: dict, now: datetime, close_price: Callable[[str, date], f
         done.append(close_position(acct, pos["id"], pos["qty"], px, at_close(due), now,
                                    "大引けで強制返済", reason))
     return done
+
+
+def is_backdated(pos: dict) -> bool:
+    """返済期限（大引け）を過ぎてから入力した建玉か。"""
+    return datetime.fromisoformat(pos["entered_at"]) >= at_close(date.fromisoformat(pos["expiry_date"]))
 
 
 # ---------------------------------------------------------------- 口座サマリー
@@ -289,6 +327,7 @@ def summary(acct: dict, prices: dict[str, float | None], now: datetime) -> dict:
         amount_total += amount
         rows.append({**p, "last": last, "unrealized": unreal, "accrued_cost": accrued, "amount": round(amount),
                      "overdue": now >= at_close(date.fromisoformat(p["expiry_date"])),
+                     "backdated": is_backdated(p),
                      "label": c.MARGIN_TYPES[p["margin_type"]]["label"]})
     cash = cash_balance(acct)
     effective = cash + min(0, unreal_total) - accrued_total
