@@ -3,30 +3,8 @@
   "id": "20261021-154811",
   "created_at": "2026-10-21T15:48:11+09:00",
   "initial_cash": 5000000,
-  "seq": 9,
-  "positions": [
-    {
-      "id": "P00009",
-      "symbol": "285A.T",
-      "name": "KIOXIA HOLDINGS CORPORATION",
-      "margin_type": "day",
-      "side": "short",
-      "qty": 100,
-      "initial_qty": 100,
-      "open_price": 12065.0,
-      "opened_at": "2026-10-23T09:38:02+09:00",
-      "open_date": "2026-10-23",
-      "entered_at": "2026-10-23T09:38:02+09:00",
-      "expiry_date": "2026-10-23",
-      "stop": 12170.0,
-      "target": null,
-      "tags": [],
-      "emotion": "",
-      "memo": "",
-      "add_type": null,
-      "nanpin_group": false
-    }
-  ],
+  "seq": 10,
+  "positions": [],
   "trades": [
     {
       "id": "T00002",
@@ -229,6 +207,40 @@
       "r_multiple": -1.11,
       "planned_rr": 1.22,
       "beyond_stop": true
+    },
+    {
+      "id": "T00010",
+      "position_id": "P00009",
+      "symbol": "285A.T",
+      "name": "KIOXIA HOLDINGS CORPORATION",
+      "margin_type": "day",
+      "side": "short",
+      "qty": 100,
+      "open_price": 12065.0,
+      "close_price": 12080.0,
+      "opened_at": "2026-10-23T09:38:02+09:00",
+      "closed_at": "2026-10-23T09:39:23+09:00",
+      "open_date": "2026-10-23",
+      "close_date": "2026-10-23",
+      "entered_at": "2026-10-23T09:39:23+09:00",
+      "holding_minutes": 1,
+      "commission": 0,
+      "stop": 12170.0,
+      "target": null,
+      "tags": [],
+      "emotion": "",
+      "memo": "",
+      "exit_memo": "損切",
+      "exit_reason": "manual",
+      "add_type": null,
+      "nanpin_group": false,
+      "gross_pnl": -1500,
+      "carry_cost": 0,
+      "carry_days": 0,
+      "net_pnl": -1500,
+      "r_multiple": -0.14,
+      "planned_rr": null,
+      "beyond_stop": false
     }
   ]
 }
