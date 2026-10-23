@@ -198,3 +198,42 @@ def test_edit_position():
         e.edit_position(acct, p["id"], {"close_price": 1}, NOW)
     t = e.close_position(acct, p["id"], 100, 1010, jst(2026, 10, 19, 11, 0), jst(2026, 10, 19, 11, 0))
     assert t["memo"] == "後から追記" and t["r_multiple"] is None
+
+
+def test_backdated_day_position_waits_for_manual_close():
+    # TradingView のリプレイ: 10/22 に 10/19 の取引を入力 → 自動の強制返済はしない
+    now = jst(2026, 10, 22, 20, 0)
+    acct = e.new_account(now)
+    p = e.open_position(acct, order(margin_type="day"), jst(2026, 10, 19, 9, 5), now, "", {"7203.T": 1000})
+    assert e.is_backdated(p)
+    assert e.apply_forced(acct, now, lambda s, d: 1010) == []
+    s = e.summary(acct, {"7203.T": 1000}, now)
+    assert s["positions"][0]["backdated"] and s["positions"][0]["overdue"]
+    with pytest.raises(e.TradeError, match="期日"):
+        e.close_position(acct, p["id"], 100, 1010, jst(2026, 10, 20, 9, 30), now)
+    t = e.close_position(acct, p["id"], 100, 1010, jst(2026, 10, 19, 14, 0), now)
+    assert t["exit_reason"] == "manual" and t["net_pnl"] == 1000
+
+
+def test_edit_times():
+    acct = e.new_account(NOW)
+    p = opened(acct, margin_type="day")
+    done = e.apply_forced(acct, jst(2026, 10, 19, 16, 0), lambda s, d: 980)        # 強制返済された
+    t = done[0]
+    assert t["exit_reason"] == "day_close" and t["holding_minutes"] == 330
+    later = jst(2026, 10, 21, 20, 0)
+    e.edit_trade(acct, t["id"], {"closed_at": jst(2026, 10, 19, 10, 45), "close_price": 1015}, later)
+    assert t["closed_at"] == "2026-10-19T10:45:00+09:00" and t["holding_minutes"] == 45
+    assert t["exit_reason"] == "manual" and t["net_pnl"] == 1500
+    assert t["edits"][-1]["changes"]["exit_reason"] == ["day_close", "manual"]
+    e.edit_trade(acct, t["id"], {"opened_at": jst(2026, 10, 19, 9, 30)}, later)
+    assert t["holding_minutes"] == 75
+    with pytest.raises(e.TradeError, match="前"):
+        e.edit_trade(acct, t["id"], {"closed_at": jst(2026, 10, 19, 9, 10)}, later)
+    with pytest.raises(e.TradeError, match="期限"):                               # いちにち信用の翌日返済
+        e.edit_trade(acct, t["id"], {"closed_at": jst(2026, 10, 20, 9, 10)}, later)
+    with pytest.raises(e.TradeError, match="立会時間外"):
+        e.edit_trade(acct, t["id"], {"closed_at": jst(2026, 10, 19, 12, 0)}, later)
+    q = opened(acct)                                                                # 制度: 建日時を直すと期日も変わる
+    e.edit_position(acct, q["id"], {"opened_at": jst(2026, 10, 16, 9, 30)}, later)
+    assert q["open_date"] == "2026-10-16" and q["expiry_date"] == "2027-04-16"

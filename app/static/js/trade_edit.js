@@ -12,6 +12,8 @@ window.TradeEdit = (function () {
       '<h2 id="edittitle"></h2>' +
       '<div class="egrid">' +
       '<label>建値<input name="open_price" type="number" step="0.1" min="0.1" required></label>' +
+      '<label>建日時<input name="opened_at" type="datetime-local" step="1" required></label>' +
+      '<label class="only-trade">返済日時<input name="closed_at" type="datetime-local" step="1"></label>' +
       '<label class="only-trade">返済価格<input name="close_price" type="number" step="0.1" min="0.1"></label>' +
       '<label>損切りライン<input name="stop" type="number" step="0.1" min="0.1"></label>' +
       '<label>利確目標<input name="target" type="number" step="0.1" min="0.1"></label>' +
@@ -23,7 +25,7 @@ window.TradeEdit = (function () {
       '</div>' +
       '<label class="blk">メモ（根拠・シナリオ・振り返り）<textarea name="memo" rows="4" maxlength="' + T.memo_max + '"></textarea></label>' +
       '<label class="blk only-trade">決済メモ<textarea name="exit_memo" rows="2" maxlength="' + T.memo_max + '"></textarea></label>' +
-      '<p class="muted" style="font-size:12px">価格を直すと損益・R・金利を再計算します。修正した内容は履歴として残ります。</p>' +
+      '<p class="muted" style="font-size:12px">価格・日時を直すと損益・R・金利・保有時間を再計算します。強制返済の返済日時を直すと「自分で返済」扱いになります。修正した内容は履歴として残ります。</p>' +
       '<div class="emsg neg"></div>' +
       '<div style="display:flex;gap:8px;justify-content:flex-end"><button type="button" class="cancel" style="background:#889">閉じる</button>' +
       '<button type="submit">保存</button></div></form>';
@@ -34,6 +36,10 @@ window.TradeEdit = (function () {
   }
 
   function num(v) { return v === '' ? null : +v; }
+  // "2026-10-22T09:05:00+09:00" → datetime-local 用 "2026-10-22T09:05:00"（JST のまま）
+  function local(iso) { return iso ? iso.slice(0, 19) : ''; }
+  // ブラウザは秒が 0 のとき "HH:MM" に省略するので、秒を補って比べる
+  function same(v, iso) { var full = function (x) { return x.length === 16 ? x + ':00' : x; }; return full(v) === local(iso); }
 
   function save(e) {
     e.preventDefault();
@@ -44,6 +50,9 @@ window.TradeEdit = (function () {
       tags: Array.prototype.filter.call(form.querySelectorAll('[name=tags]'), function (x) { return x.checked; }).map(function (x) { return x.value; }),
     };
     if (trade) { b.close_price = num(form.close_price.value); b.exit_memo = form.exit_memo.value; }
+    // 日時は変えたときだけ送る（秒まで比較）
+    if (form.opened_at.value && !same(form.opened_at.value, cur.obj.opened_at)) b.opened_at = form.opened_at.value;
+    if (trade && form.closed_at.value && !same(form.closed_at.value, cur.obj.closed_at)) b.closed_at = form.closed_at.value;
     var url = '/api/trade/' + (trade ? 'trades/' : 'positions/') + encodeURIComponent(cur.obj.id);
     var btn = form.querySelector('button[type=submit]');
     btn.disabled = true;
@@ -71,6 +80,8 @@ window.TradeEdit = (function () {
     dlg.querySelector('#edittitle').textContent = (trade ? '約定の修正・追記 ' : '建玉の修正・追記 ') + obj.id + ' ' + obj.symbol + ' ' + (obj.name || '');
     Array.prototype.forEach.call(dlg.querySelectorAll('.only-trade'), function (el) { el.style.display = trade ? '' : 'none'; });
     form.open_price.value = obj.open_price;
+    form.opened_at.value = local(obj.opened_at);
+    form.closed_at.value = trade ? local(obj.closed_at) : '';
     form.close_price.value = trade ? obj.close_price : '';
     form.stop.value = obj.stop == null ? '' : obj.stop;
     form.target.value = obj.target == null ? '' : obj.target;
