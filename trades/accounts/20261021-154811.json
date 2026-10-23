@@ -18,13 +18,24 @@
       "open_date": "2026-10-23",
       "entered_at": "2026-10-23T14:05:37+09:00",
       "expiry_date": "2026-10-23",
-      "stop": null,
+      "stop": 12415.0,
       "target": null,
       "tags": [],
       "emotion": "",
       "memo": "",
       "add_type": null,
-      "nanpin_group": false
+      "nanpin_group": false,
+      "edits": [
+        {
+          "at": "2026-10-23T14:05:57+09:00",
+          "changes": {
+            "stop": [
+              null,
+              12415.0
+            ]
+          }
+        }
+      ]
     }
   ],
   "trades": [
