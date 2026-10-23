@@ -3,7 +3,7 @@
   "id": "20261021-154811",
   "created_at": "2026-10-21T15:48:11+09:00",
   "initial_cash": 5000000,
-  "seq": 18,
+  "seq": 20,
   "positions": [],
   "trades": [
     {
@@ -386,6 +386,42 @@
       "carry_days": 0,
       "net_pnl": 6500,
       "r_multiple": 2.6,
+      "planned_rr": null,
+      "beyond_stop": false
+    },
+    {
+      "id": "T00020",
+      "position_id": "P00019",
+      "symbol": "5801.T",
+      "name": "古河電気工業",
+      "margin_type": "day",
+      "side": "long",
+      "qty": 100,
+      "open_price": 2838.0,
+      "close_price": 2894.5,
+      "opened_at": "2026-10-23T09:48:00+09:00",
+      "closed_at": "2026-10-23T15:30:00+09:00",
+      "open_date": "2026-10-23",
+      "close_date": "2026-10-23",
+      "entered_at": "2026-10-23T16:22:10+09:00",
+      "holding_minutes": 342,
+      "commission": 0,
+      "stop": 2823.0,
+      "target": null,
+      "tags": [
+        "押し目"
+      ],
+      "emotion": "",
+      "memo": "",
+      "exit_memo": "大引けで強制返済",
+      "exit_reason": "day_close",
+      "add_type": null,
+      "nanpin_group": false,
+      "gross_pnl": 5650,
+      "carry_cost": 0,
+      "carry_days": 0,
+      "net_pnl": 5650,
+      "r_multiple": 3.77,
       "planned_rr": null,
       "beyond_stop": false
     }
