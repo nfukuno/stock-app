@@ -413,6 +413,11 @@ def stats(trades: list[dict]) -> dict:
         "avg_win": sum(wins) / len(wins) if wins else None,
         "avg_loss": sum(losses) / len(losses) if losses else None,
         "profit_factor": sum(wins) / -sum(losses) if losses and sum(losses) < 0 else None,
+        # ペイオフレシオ = 平均利益 ÷ |平均損失|（結果ベースのリスクリワード）。損益分岐勝率 = 1 ÷ (1 + ペイオフ)
+        "payoff_ratio": (sum(wins) / len(wins)) / -(sum(losses) / len(losses))
+                        if wins and losses and sum(losses) < 0 else None,
+        "breakeven_win_rate": 1 / (1 + (sum(wins) / len(wins)) / -(sum(losses) / len(losses)))
+                              if wins and losses and sum(losses) < 0 else None,
         "avg_r": sum(rs) / len(rs) if rs else None, "r_count": len(rs),
         "max_drawdown": max_dd, "max_loss_streak": max_streak,
         "avg_hold_win": hold([t for t in ts if t["net_pnl"] > 0]),
@@ -435,6 +440,43 @@ def stats(trades: list[dict]) -> dict:
         "nanpin_count": sum(1 for t in ts if t.get("add_type") == "nanpin"),
         "trading_days": len({t["open_date"] for t in ts}),
     }
+
+
+# ---------------------------------------------------------------- 出力（CSV・レビュー用）
+def entry_limit(stop: float | None, target: float | None, rr: float = c.RR_BASE) -> float | None:
+    """RR が rr ちょうどになるエントリー価格（買いならこれ以下、売りならこれ以上で入れば基準を満たす）。"""
+    if stop is None or target is None:
+        return None
+    return round(stop + (target - stop) / (1 + rr), 1)
+
+
+CSV_COLUMNS = [
+    ("ID", lambda t: t["id"]), ("建日時", lambda t: t["opened_at"][:16].replace("T", " ")),
+    ("返済日時", lambda t: t["closed_at"][:16].replace("T", " ")), ("銘柄コード", lambda t: t["symbol"]),
+    ("銘柄名", lambda t: t["name"]), ("信用区分", lambda t: c.MARGIN_TYPES[t["margin_type"]]["label"]),
+    ("売買", lambda t: "買い" if t["side"] == "long" else "売り"), ("株数", lambda t: t["qty"]),
+    ("建値", lambda t: t["open_price"]), ("返済価格", lambda t: t["close_price"]),
+    ("損益(金利等込)", lambda t: t["net_pnl"]), ("金利等", lambda t: t["carry_cost"]),
+    ("R倍数", lambda t: t.get("r_multiple")), ("損切りライン", lambda t: t.get("stop")),
+    ("利確目標", lambda t: t.get("target")), ("計画RR", lambda t: t.get("planned_rr")),
+    (f"上限価格(RR{c.RR_BASE})", lambda t: entry_limit(t.get("stop"), t.get("target"))),
+    ("保有分", lambda t: t["holding_minutes"]), ("理由タグ", lambda t: "・".join(t.get("tags") or [])),
+    ("感情", lambda t: t.get("emotion") or ""), ("決済理由", lambda t: exit_type_label(t)),
+    ("損切りライン超え", lambda t: {True: "あり", False: "なし"}.get(t.get("beyond_stop"), "")),
+    ("追加の種類", lambda t: ADD_LABELS[t.get("add_type")]), ("修正あり", lambda t: "あり" if t.get("edits") else ""),
+    ("メモ", lambda t: t.get("memo") or ""), ("決済メモ", lambda t: t.get("exit_memo") or ""),
+]
+
+
+def trades_csv(trades: list[dict]) -> str:
+    import csv
+    import io
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow([h for h, _ in CSV_COLUMNS])
+    for t in sorted(trades, key=lambda t: t["closed_at"]):
+        w.writerow(["" if (v := f(t)) is None else v for _, f in CSV_COLUMNS])
+    return buf.getvalue()
 
 
 # ---------------------------------------------------------------- ロードマップ

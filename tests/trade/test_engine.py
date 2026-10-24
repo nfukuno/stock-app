@@ -253,3 +253,19 @@ def test_exit_type_stats():
     t = acct["trades"][-1]
     e.edit_trade(acct, t["id"], {"exit_type": "breakeven"}, at)
     assert e.exit_type_label(t) == "建値撤退" and e.stats(acct["trades"])["unclassified_exits"] == 0
+
+
+def test_entry_limit_and_payoff():
+    assert e.entry_limit(3794, 3884) == 3830.0                 # 幅 90 の 4 割 = 36
+    assert e.entry_limit(1010, 950) == 986.0                    # 売り: 1010 - 60×0.4
+    assert e.entry_limit(None, 3884) is None
+    acct = e.new_account(NOW)
+    at = jst(2026, 10, 19, 11, 0)
+    for px in (1020, 1020, 990):                                # +2000, +2000, -1000
+        p = opened(acct, margin_type="day")
+        e.close_position(acct, p["id"], 100, px, at, at)
+    st = e.stats(acct["trades"])
+    assert st["payoff_ratio"] == 2.0 and st["breakeven_win_rate"] == pytest.approx(1 / 3)
+    csv_text = e.trades_csv(acct["trades"])
+    lines = csv_text.strip().splitlines()
+    assert lines[0].startswith("ID,建日時,返済日時") and len(lines) == 4 and "いちにち信用" in lines[1]

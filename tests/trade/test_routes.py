@@ -153,3 +153,14 @@ def test_exit_type_routes(client):
     assert r.json()["trade"]["exit_type"] == "plan_target"
     st = client.get("/api/trade/trades").json()["stats"]
     assert st["by_exit_type"][0]["key"] == "計画どおり利確"
+
+
+def test_export_and_range(client):
+    pid = client.post("/api/trade/open", json=open_body(memo="メモ, カンマ入り")).json()["position"]["id"]
+    client.post("/api/trade/close", json={"position_id": pid, "qty": 100, "price": 1010, "exit_type": "plan_target"})
+    r = client.get("/api/trade/export.csv")
+    assert r.status_code == 200 and r.headers["content-type"].startswith("text/csv")
+    assert r.text.startswith("﻿ID,") and '"メモ, カンマ入り"' in r.text and "計画どおり利確" in r.text
+    assert client.get("/api/trade/trades?from=2026-10-20").json()["stats"]["n"] == 0
+    assert client.get("/api/trade/trades?from=2026-10-19&to=2026-10-19").json()["stats"]["n"] == 1
+    assert len(client.get("/api/trade/export.csv?to=2026-10-18").text.strip().splitlines()) == 1

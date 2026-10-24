@@ -122,7 +122,7 @@
       var reason = t.exit_reason !== 'manual' ? '<span class="badge late">強制返済</span>'
         : (t.exit_type ? '<span class="badge">' + esc(T.exit_types[t.exit_type]) + '</span> ' : '<span class="badge warn">未分類</span> ') + esc(t.exit_memo);
       items[t.id] = { kind: 'trade', obj: t };
-      return '<tr><td>' + t.id + '<br>' + TradeEdit.button(t.id) + '</td><td>' + esc(t.symbol) + ' ' + esc(t.name) + TradeEdit.badge(t) + '</td>' +
+      return '<tr><td>' + t.id + '<br>' + TradeEdit.button(t.id) + '<br>' + TradeEdit.copyButton(t.id) + '</td><td>' + esc(t.symbol) + ' ' + esc(t.name) + TradeEdit.badge(t) + '</td>' +
         '<td class="' + t.side + '">' + (t.side === 'long' ? '買' : '売') + '</td><td class="num">' + yen(t.qty) + '</td>' +
         '<td class="num">' + t.open_price + ' → ' + t.close_price + '</td><td>' + holding(t.holding_minutes) + '</td>' +
         '<td class="num ' + cls(t.net_pnl) + '">' + signed(t.net_pnl) + '</td>' +
@@ -199,6 +199,8 @@
 
   // ---- 修正・追記
   document.addEventListener('click', function (e) {
+    var cp = e.target.closest('[data-copy]');
+    if (cp && items[cp.dataset.copy]) { TradeEdit.copy(TradeEdit.reviewText(items[cp.dataset.copy].obj), cp); return; }
     var b = e.target.closest('[data-edit]');
     if (!b || !items[b.dataset.edit]) return;
     var it = items[b.dataset.edit];

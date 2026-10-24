@@ -38,19 +38,59 @@
 
   var items = {};
 
+  var last = null;          // 直近に読み込んだ成績（サマリーのコピー用）
+
   document.addEventListener('click', function (e) {
     var b = e.target.closest('[data-edit]');
     if (b && items[b.dataset.edit]) TradeEdit.open('trade', items[b.dataset.edit], load);
+    var c = e.target.closest('[data-copy]');
+    if (c && items[c.dataset.copy]) TradeEdit.copy(TradeEdit.reviewText(items[c.dataset.copy]), c);
   });
 
+  function range() {
+    var q = [];
+    if ($('from').value) q.push('from=' + $('from').value);
+    if ($('to').value) q.push('to=' + $('to').value);
+    return q.length ? '?' + q.join('&') : '';
+  }
+  ['from', 'to'].forEach(function (id) { $(id).addEventListener('change', load); });
+  $('csv').addEventListener('click', function () { location.href = '/api/trade/export.csv' + range(); });
+  $('copysum').addEventListener('click', function () { if (last) TradeEdit.copy(summaryText(last), this); });
+
+  // 週次レビューなどで別セッションに貼る成績サマリー
+  function summaryText(j) {
+    var s = j.stats;
+    var rows = function (title, xs) {
+      return title + '\n' + xs.map(function (x) {
+        return '  ' + x.key + ': ' + x.n + '件 勝率' + pct(x.win_rate) + ' 損益' + signed(x.total) +
+          ' 平均R ' + (x.avg_r == null ? '-' : x.avg_r.toFixed(2));
+      }).join('\n');
+    };
+    return [
+      '【成績サマリー】期間: ' + ($('from').value || '最初') + ' 〜 ' + ($('to').value || '最新') + '（口座 ' + j.account_id + '）',
+      '取引数 ' + s.n + '（' + s.wins + '勝 ' + s.losses + '敗）／ 勝率 ' + pct(s.win_rate) + ' ／ 損益合計 ' + signed(s.total) + '円',
+      '期待値(1取引) ' + signed(s.avg) + '円 ／ 平均R ' + (s.avg_r == null ? '-' : s.avg_r.toFixed(2)) +
+        ' ／ PF ' + (s.profit_factor == null ? '-' : s.profit_factor.toFixed(2)),
+      'ペイオフレシオ ' + (s.payoff_ratio == null ? '-' : s.payoff_ratio.toFixed(2)) + ' ／ 損益分岐勝率 ' + pct(s.breakeven_win_rate) +
+        ' ／ 最大DD ' + yen(s.max_drawdown) + '円 ／ 最大連敗 ' + s.max_loss_streak,
+      '損切り設定率 ' + pct(s.stop_set_rate) + ' ／ 損切りライン超え ' + s.beyond_stop + '件 ／ ナンピン ' + s.nanpin_count + '回 ／ 決済理由未分類 ' + s.unclassified_exits + '件',
+      '',
+      rows('■決済理由別', s.by_exit_type), rows('■エントリー理由別', s.by_tag), rows('■時間帯別', s.by_hour),
+      rows('■感情別', s.by_emotion), rows('■売買別', s.by_side),
+      '',
+      '※ 約定ごとの詳細は CSV を添付します。来週の重点ルールを1つ提案してください。',
+    ].join('\n');
+  }
+
   function load() {
-  fetch('/api/trade/trades').then(function (r) {
+  fetch('/api/trade/trades' + range()).then(function (r) {
     return r.text().then(function (t) {
       var j; try { j = JSON.parse(t); } catch (e) { throw new Error(t || r.statusText); }
       if (!r.ok) throw new Error(j.detail || r.statusText);
       return j;
     });
   }).then(function (j) {
+    last = j;
     var s = j.stats;
     $('acct').textContent = '口座 ' + j.account_id + '（初期保証金 ' + yen(j.initial_cash) + ' 円）';
     var k = [
@@ -61,6 +101,9 @@
       ['平均R', s.avg_r == null ? '-' : s.avg_r.toFixed(2) + 'R（' + s.r_count + '件）', cls(s.avg_r)],
       ['プロフィットファクター', s.profit_factor == null ? '-' : s.profit_factor.toFixed(2)],
       ['平均利益 / 平均損失', signed(s.avg_win) + ' / ' + signed(s.avg_loss)],
+      ['ペイオフレシオ（平均利益÷平均損失）', s.payoff_ratio == null ? '-' : s.payoff_ratio.toFixed(2)],
+      ['損益分岐勝率（これ以上勝てばプラス）', pct(s.breakeven_win_rate),
+        s.breakeven_win_rate != null && s.win_rate != null ? (s.win_rate >= s.breakeven_win_rate ? 'pos' : 'neg') : ''],
       ['最大ドローダウン', yen(s.max_drawdown), s.max_drawdown ? 'neg' : ''],
       ['最大連敗', s.max_loss_streak],
       ['平均保有（勝 / 負）', hold(s.avg_hold_win) + ' / ' + hold(s.avg_hold_loss)],
@@ -81,7 +124,7 @@
     items = {};
     $('trades').innerHTML = j.trades.length ? j.trades.map(function (t) {
       items[t.id] = t;
-      return '<tr><td>' + t.id + '<br>' + TradeEdit.button(t.id) + '</td><td>' + dt(t.opened_at) + ' → ' + dt(t.closed_at) + '</td><td>' + esc(t.symbol) + ' ' + esc(t.name) + '</td>' +
+      return '<tr><td>' + t.id + '<br>' + TradeEdit.button(t.id) + '<br>' + TradeEdit.copyButton(t.id) + '</td><td>' + dt(t.opened_at) + ' → ' + dt(t.closed_at) + '</td><td>' + esc(t.symbol) + ' ' + esc(t.name) + '</td>' +
         '<td>' + esc(window.TRADE.labels[t.margin_type].label) + '</td><td class="' + t.side + '">' + (t.side === 'long' ? '買' : '売') + '</td>' +
         '<td class="num">' + yen(t.qty) + '</td><td class="num">' + t.open_price + ' → ' + t.close_price + '</td>' +
         '<td class="num ' + cls(t.net_pnl) + '">' + signed(t.net_pnl) + '</td><td class="num">' + yen(t.carry_cost) + '</td>' +

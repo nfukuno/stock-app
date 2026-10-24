@@ -12,11 +12,18 @@
   td.num, th.num { text-align:right; font-variant-numeric:tabular-nums; }
   .long { color:var(--up); font-weight:600; } .short { color:var(--down); font-weight:600; }
   .table-wrap th, .table-wrap td { white-space:nowrap; } .table-wrap td.wrap { white-space:normal; min-width:220px; }
+  .toolbar { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
   .table-wrap { overflow-x:auto; } svg text { font-size:11px; fill:var(--muted); }
 </style>
 {% endblock %}
 {% block body %}
 <h1>トレード分析 <span class="muted" style="font-size:13px;font-weight:400" id="acct"></span></h1>
+<div class="card toolbar">
+  <label>期間（返済日） <input type="date" id="from"> 〜 <input type="date" id="to"></label>
+  <button type="button" id="csv">CSV ダウンロード</button>
+  <button type="button" id="copysum">成績サマリーをコピー</button>
+  <span class="muted" style="font-size:12px">各約定の「📋」で、1件ずつレビュー用の文章をコピーできます</span>
+</div>
 <div class="card"><div class="kpis" id="kpis"></div></div>
 <div class="card"><h2>損益曲線（確定損益の累計）</h2><div id="curve" class="muted">-</div></div>
 <div class="groups" id="groups"></div>
@@ -28,7 +35,7 @@
     <tbody id="trades"></tbody>
   </table></div>
 </div>
-<script>window.TRADE = {labels: {{ margin_types | tojson }}, tags: {{ tags | tojson }}, emotions: {{ emotions | tojson }}, memo_max: {{ memo_max }}, exit_types: {{ exit_types | tojson }}};</script>
+<script>window.TRADE = {labels: {{ margin_types | tojson }}, tags: {{ tags | tojson }}, emotions: {{ emotions | tojson }}, memo_max: {{ memo_max }}, exit_types: {{ exit_types | tojson }}, rr_base: {{ rr_base }}};</script>
 <script src="/static/js/trade_edit.js?v={{ v }}"></script>
 <script src="/static/js/trade_history.js?v={{ v }}"></script>
 {% endblock %}

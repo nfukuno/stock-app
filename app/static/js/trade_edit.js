@@ -110,5 +110,55 @@ window.TradeEdit = (function () {
 
   function button(id) { return '<button type="button" class="editbtn" data-edit="' + esc(id) + '">✎ 編集</button>'; }
 
-  return { open: open, badge: badge, button: button };
+  // ---- レビュー用テキスト（別セッションの Claude / ChatGPT に貼る）
+  var RR = T.rr_base || 1.5;
+  function n(v) { return v == null ? '-' : String(v); }
+  function limit(t) {
+    if (t.stop == null || t.target == null) return null;
+    return Math.round((t.stop + (t.target - t.stop) / (1 + RR)) * 10) / 10;
+  }
+  function reviewText(t) {
+    var long = t.side === 'long';
+    var lim = limit(t);
+    var exitLabel = t.exit_reason !== 'manual' ? '強制返済' : (T.exit_types[t.exit_type] || '未分類');
+    var flags = [];
+    if (t.beyond_stop) flags.push('損切りラインを超えて決済');
+    if (t.add_type === 'nanpin') flags.push('ナンピン');
+    if (t.planned_rr != null && t.planned_rr < RR) flags.push('計画RRが基準 ' + RR + ' 未満');
+    if (lim != null && (long ? t.open_price > lim : t.open_price < lim)) flags.push('上限価格を超えて約定');
+    if (t.edits && t.edits.length) flags.push('記録を後から修正');
+    return [
+      '【区分】リプレイ / 本番（どちらか残す）　【日付】' + t.open_date + '　【銘柄】' + t.symbol + ' ' + (t.name || '') +
+        '　【売買】' + (long ? '買い' : '売り') + ' ' + t.qty + '株（' + T.labels[t.margin_type].label + '）',
+      '',
+      '【計画（入る前）】',
+      '型・根拠: ' + ((t.tags || []).join('・') || '未記入'),
+      'メモ: ' + (t.memo || '未記入'),
+      '損切り: ' + n(t.stop) + '　目標: ' + n(t.target) + '　計画RR: ' + n(t.planned_rr) +
+        '　上限価格(RR' + RR + '): ' + n(lim),
+      '',
+      '【実際】',
+      '建て: ' + t.open_price + '（' + t.opened_at.slice(11, 16) + '）　返済: ' + t.close_price + '（' + t.closed_at.slice(11, 16) + '）' +
+        '　保有: ' + t.holding_minutes + '分',
+      '損益: ' + (t.net_pnl > 0 ? '+' : '') + t.net_pnl + '円　R: ' + n(t.r_multiple) + '　決済理由: ' + exitLabel +
+        '　感情: ' + (t.emotion || '未記入'),
+      '決済メモ: ' + (t.exit_memo || '未記入'),
+      '自動チェック: ' + (flags.length ? flags.join(' / ') : '特になし'),
+      '',
+      '【環境】日経先物の方向: 　寄りのギャップ: 　出来高: ',
+      '【画像】①エントリー直前の5分足（未来が見えない状態） ②決済後の5分足（決済後30分まで） ③必要なら1分足',
+      '【自分で気になった点・質問】',
+    ].join('\n');
+  }
+
+  function copy(text, btn) {
+    var done = function () { if (btn) { var o = btn.textContent; btn.textContent = '✓ コピーしました'; setTimeout(function () { btn.textContent = o; }, 1500); } };
+    if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(text).then(done);
+    var ta = document.createElement('textarea');           // http://localhost 以外（LAN 越しなど）向けの予備
+    ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); done();
+  }
+
+  function copyButton(id) { return '<button type="button" class="editbtn" data-copy="' + esc(id) + '">📋 レビュー用にコピー</button>'; }
+
+  return { open: open, badge: badge, button: button, reviewText: reviewText, copy: copy, copyButton: copyButton };
 })();
