@@ -146,7 +146,7 @@ def open_position(acct: dict, o, at: datetime, now: datetime, name: str, prices:
 
 
 def close_position(acct: dict, position_id: str, qty: int, price: float, at: datetime, now: datetime,
-                   memo: str = "", reason: str = "manual") -> dict:
+                   memo: str = "", reason: str = "manual", exit_type: str = "") -> dict:
     pos = next((p for p in acct["positions"] if p["id"] == position_id), None)
     if pos is None:
         raise TradeError("建玉が見つかりません（すでに返済済みの可能性があります）", 404)
@@ -170,7 +170,7 @@ def close_position(acct: dict, position_id: str, qty: int, price: float, at: dat
         "commission": c.MARGIN_TYPES[pos["margin_type"]]["commission"],
         "stop": pos.get("stop"), "target": pos.get("target"),
         "tags": pos["tags"], "emotion": pos["emotion"], "memo": pos["memo"], "exit_memo": memo,
-        "exit_reason": reason, "add_type": pos.get("add_type"), "nanpin_group": bool(pos.get("nanpin_group")),
+        "exit_reason": reason, "exit_type": exit_type, "add_type": pos.get("add_type"), "nanpin_group": bool(pos.get("nanpin_group")),
     }
     _derive(trade)
     acct["trades"].append(trade)
@@ -196,7 +196,7 @@ def _derive(t: dict) -> None:
 
 # ---------------------------------------------------------------- 後からの修正・追記
 POSITION_FIELDS = {"open_price", "opened_at", "stop", "target", "tags", "emotion", "memo"}
-TRADE_FIELDS = POSITION_FIELDS | {"close_price", "closed_at", "exit_memo"}
+TRADE_FIELDS = POSITION_FIELDS | {"close_price", "closed_at", "exit_memo", "exit_type"}
 
 
 def _check_levels(side: str, price: float, stop: float | None, target: float | None) -> None:
@@ -270,7 +270,8 @@ def edit_trade(acct: dict, trade_id: str, changes: dict, now: datetime) -> dict:
     return t
 
 
-def close_group(acct: dict, key: str, qty: int, price: float, at: datetime, now: datetime, memo: str = "") -> list[dict]:
+def close_group(acct: dict, key: str, qty: int, price: float, at: datetime, now: datetime, memo: str = "",
+                exit_type: str = "") -> list[dict]:
     """まとめて返済。古い建玉から順に qty 株を返済する（途中で失敗したら口座は保存しない前提）。"""
     group = _same_group(acct, key)
     total = sum(p["qty"] for p in group)
@@ -283,7 +284,7 @@ def close_group(acct: dict, key: str, qty: int, price: float, at: datetime, now:
         if left == 0:
             break
         n = min(left, p["qty"])
-        trades.append(close_position(acct, p["id"], n, price, at, now, memo))
+        trades.append(close_position(acct, p["id"], n, price, at, now, memo, exit_type=exit_type))
         left -= n
     return trades
 
@@ -369,7 +370,15 @@ def _group(trades: list[dict]) -> dict:
     n = len(trades)
     wins = [t for t in trades if t["net_pnl"] > 0]
     total = sum(t["net_pnl"] for t in trades)
-    return {"n": n, "win_rate": len(wins) / n if n else None, "total": total, "avg": total / n if n else None}
+    rs = [t["r_multiple"] for t in trades if t.get("r_multiple") is not None]
+    return {"n": n, "win_rate": len(wins) / n if n else None, "total": total, "avg": total / n if n else None,
+            "avg_r": sum(rs) / len(rs) if rs else None}
+
+
+def exit_type_label(t: dict) -> str:
+    if t["exit_reason"] != "manual":
+        return "強制返済"
+    return c.EXIT_TYPES.get(t.get("exit_type") or "", "未分類")
 
 
 def stats(trades: list[dict]) -> dict:
@@ -404,6 +413,11 @@ def stats(trades: list[dict]) -> dict:
         "avg_win": sum(wins) / len(wins) if wins else None,
         "avg_loss": sum(losses) / len(losses) if losses else None,
         "profit_factor": sum(wins) / -sum(losses) if losses and sum(losses) < 0 else None,
+        # ペイオフレシオ = 平均利益 ÷ |平均損失|（結果ベースのリスクリワード）。損益分岐勝率 = 1 ÷ (1 + ペイオフ)
+        "payoff_ratio": (sum(wins) / len(wins)) / -(sum(losses) / len(losses))
+                        if wins and losses and sum(losses) < 0 else None,
+        "breakeven_win_rate": 1 / (1 + (sum(wins) / len(wins)) / -(sum(losses) / len(losses)))
+                              if wins and losses and sum(losses) < 0 else None,
         "avg_r": sum(rs) / len(rs) if rs else None, "r_count": len(rs),
         "max_drawdown": max_dd, "max_loss_streak": max_streak,
         "avg_hold_win": hold([t for t in ts if t["net_pnl"] > 0]),
@@ -418,12 +432,51 @@ def stats(trades: list[dict]) -> dict:
         "by_weekday": by(lambda t: WEEKDAYS[date.fromisoformat(t["open_date"]).weekday()], WEEKDAYS.index),
         "by_emotion": by(lambda t: t["emotion"] or "(なし)"),
         "by_symbol": by(lambda t: f"{t['symbol']} {t['name']}".strip()),
+        "by_exit_type": by(exit_type_label, [*c.EXIT_TYPES.values(), "強制返済", "未分類"].index),
+        "unclassified_exits": sum(1 for t in ts if exit_type_label(t) == "未分類"),
         "by_add_type": by(lambda t: ADD_LABELS[t.get("add_type")], list(ADD_LABELS.values()).index),
         "by_nanpin_group": by(lambda t: "ナンピンした建玉" if t.get("nanpin_group") else "ナンピンなし",
                               lambda k: k != "ナンピンなし"),
         "nanpin_count": sum(1 for t in ts if t.get("add_type") == "nanpin"),
         "trading_days": len({t["open_date"] for t in ts}),
     }
+
+
+# ---------------------------------------------------------------- 出力（CSV・レビュー用）
+def entry_limit(stop: float | None, target: float | None, rr: float = c.RR_BASE) -> float | None:
+    """RR が rr ちょうどになるエントリー価格（買いならこれ以下、売りならこれ以上で入れば基準を満たす）。"""
+    if stop is None or target is None:
+        return None
+    return round(stop + (target - stop) / (1 + rr), 1)
+
+
+CSV_COLUMNS = [
+    ("ID", lambda t: t["id"]), ("建日時", lambda t: t["opened_at"][:16].replace("T", " ")),
+    ("返済日時", lambda t: t["closed_at"][:16].replace("T", " ")), ("銘柄コード", lambda t: t["symbol"]),
+    ("銘柄名", lambda t: t["name"]), ("信用区分", lambda t: c.MARGIN_TYPES[t["margin_type"]]["label"]),
+    ("売買", lambda t: "買い" if t["side"] == "long" else "売り"), ("株数", lambda t: t["qty"]),
+    ("建値", lambda t: t["open_price"]), ("返済価格", lambda t: t["close_price"]),
+    ("損益(金利等込)", lambda t: t["net_pnl"]), ("金利等", lambda t: t["carry_cost"]),
+    ("R倍数", lambda t: t.get("r_multiple")), ("損切りライン", lambda t: t.get("stop")),
+    ("利確目標", lambda t: t.get("target")), ("計画RR", lambda t: t.get("planned_rr")),
+    (f"上限価格(RR{c.RR_BASE})", lambda t: entry_limit(t.get("stop"), t.get("target"))),
+    ("保有分", lambda t: t["holding_minutes"]), ("理由タグ", lambda t: "・".join(t.get("tags") or [])),
+    ("感情", lambda t: t.get("emotion") or ""), ("決済理由", lambda t: exit_type_label(t)),
+    ("損切りライン超え", lambda t: {True: "あり", False: "なし"}.get(t.get("beyond_stop"), "")),
+    ("追加の種類", lambda t: ADD_LABELS[t.get("add_type")]), ("修正あり", lambda t: "あり" if t.get("edits") else ""),
+    ("メモ", lambda t: t.get("memo") or ""), ("決済メモ", lambda t: t.get("exit_memo") or ""),
+]
+
+
+def trades_csv(trades: list[dict]) -> str:
+    import csv
+    import io
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow([h for h, _ in CSV_COLUMNS])
+    for t in sorted(trades, key=lambda t: t["closed_at"]):
+        w.writerow(["" if (v := f(t)) is None else v for _, f in CSV_COLUMNS])
+    return buf.getvalue()
 
 
 # ---------------------------------------------------------------- ロードマップ

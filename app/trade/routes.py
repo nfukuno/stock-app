@@ -3,8 +3,8 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi.responses import HTMLResponse, Response
 from fastapi.templating import Jinja2Templates
 
 from app.forecast import config as fconfig
@@ -96,7 +96,7 @@ def _static_version() -> int:
 
 
 def _ctx() -> dict:
-    return {"margin_types": config.MARGIN_TYPES, "tags": config.TAGS, "emotions": config.EMOTIONS,
+    return {"margin_types": config.MARGIN_TYPES, "tags": config.TAGS, "emotions": config.EMOTIONS, "exit_types": config.EXIT_TYPES, "rr_base": config.RR_BASE,
             "lot": config.LOT, "memo_max": config.MEMO_MAX, "v": _static_version()}
 
 
@@ -146,7 +146,8 @@ def api_close(body: CloseIn):
     acct = _load(store)
     now = market.now_jst()
     try:
-        tr = engine.close_position(acct, body.position_id, body.qty, body.price, _time(body.executed_at), now, body.memo)
+        tr = engine.close_position(acct, body.position_id, body.qty, body.price, _time(body.executed_at), now, body.memo,
+                                   exit_type=body.exit_type)
     except engine.TradeError as e:
         raise _err(e)
     _save(store, acct, f"close {tr['id']} {tr['symbol']} {tr['qty']}@{tr['close_price']} {tr['net_pnl']:+,}")
@@ -159,7 +160,8 @@ def api_close_group(body: CloseGroupIn):
     acct = _load(store)
     now = market.now_jst()
     try:
-        trades = engine.close_group(acct, body.key, body.qty, body.price, _time(body.executed_at), now, body.memo)
+        trades = engine.close_group(acct, body.key, body.qty, body.price, _time(body.executed_at), now, body.memo,
+                                    body.exit_type)
     except engine.TradeError as e:
         raise _err(e)
     net = sum(t["net_pnl"] for t in trades)
@@ -202,8 +204,23 @@ def api_reset(body: ResetIn):
     return _view(acct)
 
 
+def _in_range(trades: list[dict], date_from: str | None, date_to: str | None) -> list[dict]:
+    return [t for t in trades if (not date_from or t["close_date"] >= date_from) and (not date_to or t["close_date"] <= date_to)]
+
+
 @router.get("/api/trade/trades")
-def api_trades():
+def api_trades(date_from: str | None = Query(None, alias="from"), date_to: str | None = Query(None, alias="to")):
     acct = _load(tstore.get_store())
-    return {"account_id": acct["id"], "initial_cash": acct["initial_cash"],
-            "trades": list(reversed(acct["trades"])), "stats": engine.stats(acct["trades"])}
+    trades = _in_range(acct["trades"], date_from, date_to)
+    return {"account_id": acct["id"], "initial_cash": acct["initial_cash"], "rr_base": config.RR_BASE,
+            "trades": list(reversed(trades)), "stats": engine.stats(trades)}
+
+
+@router.get("/api/trade/export.csv")
+def api_export_csv(date_from: str | None = Query(None, alias="from"), date_to: str | None = Query(None, alias="to")):
+    """約定履歴の CSV（Excel や ChatGPT / Claude にそのまま渡せるよう UTF-8 BOM 付き）。"""
+    acct = _load(tstore.get_store())
+    body = "\ufeff" + engine.trades_csv(_in_range(acct["trades"], date_from, date_to))
+    name = f"trades_{acct['id']}_{date_from or 'all'}_{date_to or 'all'}.csv"
+    return Response(body, media_type="text/csv; charset=utf-8",
+                    headers={"Content-Disposition": f'attachment; filename="{name}"'})
