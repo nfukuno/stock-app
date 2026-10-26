@@ -38,14 +38,18 @@
 
   function posRow(p, single) {
     var add = p.add_type === 'nanpin' ? ' <span class="badge warn">ナンピン</span>' : p.add_type === 'pyramid' ? ' <span class="badge">増し玉</span>' : '';
+    if (p.horizon === 'swing') add += ' <span class="badge swing">スイング</span>';
+    if (p.earnings_days != null && p.earnings_days >= 0 && p.earnings_days <= 14)
+      add += ' <span class="badge earn">決算まで' + p.earnings_days + '日</span>';
     items[p.id] = { kind: 'position', obj: p };
     return '<tr' + (single ? '' : ' class="member"') + '><td>' + p.id + '<br>' + TradeEdit.button(p.id) + '</td><td>' + esc(p.symbol) + ' ' + esc(p.name) + add +
       TradeEdit.badge(p) + '<div class="memo-line">' + TradeEdit.planLine(p) + '</div></td><td>' + esc(p.label) + '</td>' +
       '<td class="' + p.side + '">' + (p.side === 'long' ? '買' : '売') + '</td><td class="num">' + yen(p.qty) + '</td>' +
       '<td class="num">' + p.open_price + '</td><td class="num">' + (p.last == null ? '-' : p.last) + '</td>' +
       '<td class="num ' + cls(p.unrealized) + '">' + signed(p.unrealized) + '</td><td class="num">' + yen(p.accrued_cost) + '</td>' +
-      '<td>' + (p.stop || '-') + ' / ' + (p.target || '-') + '</td>' +
-      '<td>' + hm(p.opened_at) + '<br><span class="muted">' + p.expiry_date + '</span></td>' +
+      '<td>' + (p.judge_stop ? '<span class="muted">判</span>' + p.judge_stop + ' ' : '') + (p.stop || '-') + ' / ' + (p.target || '-') +
+        (p.next_wall_price ? '<br><span class="muted">壁 ' + p.next_wall_price + '</span>' : '') + '</td>' +
+      '<td>' + hm(p.opened_at) + '<br><span class="muted">' + (p.expiry_date || '期日なし') + '</span></td>' +
       '<td>' + closeForm('data-id="' + p.id + '"', p.qty, p.last, '返済') + '</td></tr>';
   }
 
@@ -145,6 +149,25 @@
     short: { hint: '売り: 損切りは建値より上、目標は下', basis: '例: 5分足が VWAP で跳ね返されて確定、戻り高値 2,520 の下',
              rule: '例: 5分足が 2,520 を超えて確定したら撤退（任意）', tgt: '例: 本日安値 2,440（任意）', limit: '下限価格', cmp: '以上で売れば' },
   };
+  // ---- デイトレ / スイングのタブ
+  function isSwing() { return form.horizon.value === 'swing'; }
+  function horizonView() {
+    var sw = isSwing(), mt = form.margin_type;
+    $('swingbox').hidden = !sw;
+    $('horizonhint').textContent = sw ? '日足で判断し、持ち越す取引（現物・制度信用・一般信用）' : '当日中に手仕舞う取引';
+    $('entry_method').required = sw; $('next_wall_price').required = sw;
+    Array.prototype.forEach.call(mt.options, function (o) { o.hidden = o.disabled = sw && o.value === 'day'; });
+    if (sw && mt.value === 'day') mt.value = 'system';
+    if (!sw) mt.value = 'day';
+    $('stop').placeholder = (sw ? '保険ストップ' : '損切り価格') + '（建値より' + (form.side.value === 'long' ? '下' : '上') + '）';
+    if (sw) $('plan_exit_rule').placeholder = form.side.value === 'long'
+      ? '例: 終値で 3,834 を割ったら翌日寄りで撤退（任意）' : '例: 終値で 2,520 を超えたら翌日寄りで撤退（任意）';
+    try { localStorage.setItem('trade.horizon', form.horizon.value); } catch (e) {}
+  }
+  Array.prototype.forEach.call(form.querySelectorAll('[name=horizon]'), function (r) {
+    r.addEventListener('change', function () { planLabels(); horizonView(); updatePreview(); });
+  });
+
   function planLabels() {
     var side = form.side.value, h = HINT[side];
     $('planhint').textContent = h.hint;
@@ -171,8 +194,16 @@
     if (risk <= 0) return { text: '損切りは建値より' + (long ? '下' : '上') + 'に置いてください。', cls: 'ng', bad: true };
     if (reward <= 0) return { text: '目標は建値より' + (long ? '上' : '下') + 'に置いてください。', cls: 'ng', bad: true };
     var rr = reward / risk, q = +form.qty.value || 0;
-    var tail = ' ／ 損切り時 ' + signed(-risk * q) + ' 円 ／ 約定代金 ' + yen(q * p) + ' 円（必要保証金 ' + yen(q * p * 0.3) + ' 円）';
-    return { text: '計画RR ' + rr.toFixed(2) + (rr >= RR ? ' ✅ ' : ' ⚠ 基準 ' + RR + ' 未満 ') + '／ ' + head + tail, cls: rr >= RR ? 'ok' : 'ng', rr: rr };
+    var cash = form.margin_type.value === 'cash';
+    var tail = ' ／ 損切り時 ' + signed(-risk * q) + ' 円 ／ 約定代金 ' + yen(q * p) + ' 円' +
+      (cash ? '（現物: 代金全額が必要）' : '（必要保証金 ' + yen(q * p * 0.3) + ' 円）');
+    // 次の壁が目標より手前にある =「近すぎる壁」。壁までの RR も出す
+    var wall = isSwing() ? +form.next_wall_price.value : 0, wallNote = '';
+    if (wall && (wall - p) * (long ? 1 : -1) > 0 && (tp - wall) * (long ? 1 : -1) > 0) {
+      wallNote = ' ／ ⚠ 目標の手前に次の壁 ' + yen1(wall) + '（壁までの RR ' + (((wall - p) * (long ? 1 : -1)) / risk).toFixed(2) + '）';
+    }
+    return { text: '計画RR ' + rr.toFixed(2) + (rr >= RR ? ' ✅ ' : ' ⚠ 基準 ' + RR + ' 未満 ') + '／ ' + head + wallNote + tail,
+             cls: rr >= RR && !wallNote ? 'ok' : 'ng', rr: rr };
   }
   function yen1(v) { return v.toLocaleString('ja-JP', { maximumFractionDigits: 1 }); }
   function updatePreview() {
@@ -180,8 +211,11 @@
     $('planout').textContent = c.text;
     $('planout').className = 'planout ' + c.cls;
   }
-  Array.prototype.forEach.call(form.querySelectorAll('[name=side]'), function (r) { r.addEventListener('change', function () { planLabels(); updatePreview(); }); });
+  Array.prototype.forEach.call(form.querySelectorAll('[name=side]'), function (r) { r.addEventListener('change', function () { planLabels(); horizonView(); updatePreview(); }); });
   planLabels();
+  try { if (localStorage.getItem('trade.horizon') === 'swing') form.horizon.value = 'swing'; } catch (e) {}
+  horizonView();
+  updatePreview();
   form.addEventListener('input', updatePreview);
 
   $('symbol').addEventListener('change', function () {
@@ -199,9 +233,14 @@
       symbol: form.symbol.value, name: form.name.value, margin_type: form.margin_type.value, side: form.side.value,
       qty: +form.qty.value, price: +form.price.value, executed_at: form.executed_at.value || null,
       stop: +form.stop.value, target: +form.target.value,
+      horizon: form.horizon.value,
       setup: form.setup.value, plan_basis: form.plan_basis.value, plan_exit_rule: form.plan_exit_rule.value,
       plan_target_basis: form.plan_target_basis.value,
       emotion: form.emotion.value, memo: form.memo.value,
+      decision_date: isSwing() && form.decision_date.value || null, entry_method: isSwing() && form.entry_method.value || null,
+      judge_stop: isSwing() && form.judge_stop.value ? +form.judge_stop.value : null,
+      next_wall_price: isSwing() && form.next_wall_price.value ? +form.next_wall_price.value : null,
+      next_wall_kind: isSwing() ? form.next_wall_kind.value : '', earnings_date: isSwing() && form.earnings_date.value || null,
       tags: Array.prototype.filter.call(form.querySelectorAll('[name=tags]'), function (x) { return x.checked; }).map(function (x) { return x.value; }),
     };
     var c = planCheck();
@@ -212,7 +251,8 @@
     api('POST', '/api/trade/open', b).then(function (r) {
       var p = r.position;
       msg($('openmsg'), p.id + ' ' + p.symbol + ' ' + (p.side === 'long' ? '買' : '売') + ' ' + p.qty + '株 @' + p.open_price + ' を建てました', true);
-      form.reset(); $('symname').placeholder = '自動取得'; planLabels(); updatePreview();
+      var keep = form.horizon.value;
+      form.reset(); form.horizon.value = keep; $('symname').placeholder = '自動取得'; planLabels(); horizonView(); updatePreview();
       render(r.account);
     }).catch(function (e) { msg($('openmsg'), e.message); }).finally(function () { btn.disabled = false; });
   });

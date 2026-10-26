@@ -47,8 +47,15 @@
     if (c && items[c.dataset.copy]) TradeEdit.copy(TradeEdit.reviewText(items[c.dataset.copy]), c);
   });
 
+  function hz() { var c = document.querySelector('[name=hz]:checked'); return c ? c.value : ''; }
+  Array.prototype.forEach.call(document.querySelectorAll('[name=hz]'), function (r) {
+    r.addEventListener('change', function () { try { localStorage.setItem('trade.hz', hz()); } catch (e) {} load(); });
+  });
+  try { var saved = localStorage.getItem('trade.hz'); if (saved) document.querySelector('[name=hz][value=' + saved + ']').checked = true; } catch (e) {}
+
   function range() {
     var q = [];
+    if (hz()) q.push('horizon=' + hz());
     if ($('from').value) q.push('from=' + $('from').value);
     if ($('to').value) q.push('to=' + $('to').value);
     return q.length ? '?' + q.join('&') : '';
@@ -67,7 +74,7 @@
       }).join('\n');
     };
     return [
-      '【成績サマリー】期間: ' + ($('from').value || '最初') + ' 〜 ' + ($('to').value || '最新') + '（口座 ' + j.account_id + '）',
+      '【成績サマリー】' + ({ '': 'デイトレ＋スイング', day: 'デイトレ', swing: 'スイング' })[hz()] + '　期間: ' + ($('from').value || '最初') + ' 〜 ' + ($('to').value || '最新') + '（口座 ' + j.account_id + '）',
       '取引数 ' + s.n + '（' + s.wins + '勝 ' + s.losses + '敗）／ 勝率 ' + pct(s.win_rate) + ' ／ 損益合計 ' + signed(s.total) + '円',
       '期待値(1取引) ' + signed(s.avg) + '円 ／ 平均R ' + (s.avg_r == null ? '-' : s.avg_r.toFixed(2)) +
         ' ／ PF ' + (s.profit_factor == null ? '-' : s.profit_factor.toFixed(2)),
@@ -75,7 +82,13 @@
         ' ／ 最大DD ' + yen(s.max_drawdown) + '円 ／ 最大連敗 ' + s.max_loss_streak,
       '損切り設定率 ' + pct(s.stop_set_rate) + ' ／ 損切りライン超え ' + s.beyond_stop + '件 ／ ナンピン ' + s.nanpin_count + '回 ／ 決済理由未分類 ' + s.unclassified_exits + '件',
       '',
+      hz() === 'day' ? '' : '平均保有 ' + (s.avg_hold_bdays == null ? '-' : s.avg_hold_bdays.toFixed(1)) + '営業日 ／ 持ち越し費用 ' + yen(s.carry_total) +
+        '円 ／ 平均MFE ' + (s.avg_mfe_r == null ? '-' : s.avg_mfe_r.toFixed(2)) + 'R ／ 平均MAE ' + (s.avg_mae_r == null ? '-' : s.avg_mae_r.toFixed(2)) +
+        'R ／ 取り切り率 ' + pct(s.avg_capture) + ' ／ 窓で損切り ' + s.gap_stops + '件 ／ 保険の平均滑り ' +
+        (s.avg_stop_slip_r == null ? '-' : s.avg_stop_slip_r.toFixed(2)) + 'R ／ 決算またぎ ' + s.earnings_crossed + '件',
+      hz() ? '' : rows('■時間軸別', s.by_horizon),
       rows('■型別', s.by_setup), rows('■RR 基準を守ったか', s.by_rr_rule),
+      hz() === 'day' ? '' : rows('■エントリー方法別', s.by_entry_method),
       rows('■決済理由別', s.by_exit_type), rows('■補足タグ別', s.by_tag), rows('■時間帯別', s.by_hour),
       rows('■感情別', s.by_emotion), rows('■売買別', s.by_side),
       '',
@@ -114,12 +127,25 @@
       ['決済理由が未分類', s.unclassified_exits + '件', s.unclassified_exits ? 'neg' : ''],
       ['RR 基準未満で入った', s.below_rr_base + '件', s.below_rr_base ? 'neg' : ''],
     ];
+    var r2 = function (v) { return v == null ? '-' : (v > 0 ? '+' : '') + v.toFixed(2) + 'R'; };
+    if (hz() !== 'day') k = k.concat([
+      ['平均保有（営業日）', s.avg_hold_bdays == null ? '-' : s.avg_hold_bdays.toFixed(1) + '日'],
+      ['持ち越し費用の合計', yen(s.carry_total) + '円', s.carry_total ? 'neg' : ''],
+      ['平均 MFE / MAE', r2(s.avg_mfe_r) + ' / ' + r2(s.avg_mae_r) + '（' + s.mfe_count + '件）'],
+      ['利益の取り切り率（R ÷ MFE）', pct(s.avg_capture)],
+      ['窓で損切り', s.gap_stops + '件', s.gap_stops ? 'neg' : ''],
+      ['保険ストップの平均の滑り', r2(s.avg_stop_slip_r) + '（' + s.stop_slip_count + '件）', s.avg_stop_slip_r < 0 ? 'neg' : ''],
+      ['決算をまたいだ', s.earnings_crossed + '件', s.earnings_crossed ? 'neg' : ''],
+    ]);
     $('kpis').innerHTML = k.map(function (x) {
       return '<div class="kpi"><div class="l">' + x[0] + '</div><div class="v ' + (x[2] || '') + '">' + x[1] + '</div></div>';
     }).join('');
     $('curve').innerHTML = curve(s.curve);
     $('groups').innerHTML = [
+      hz() ? '' : group('時間軸別', s.by_horizon),
       group('型別（3行メモ）', s.by_setup), group('RR 基準を守ったか', s.by_rr_rule),
+      hz() === 'day' ? '' : group('エントリー方法別（スイング）', s.by_entry_method),
+      hz() === 'day' ? '' : group('決算をまたいだか', s.by_earnings),
       group('決済理由別', s.by_exit_type), group('補足タグ別', s.by_tag), group('時間帯別（建てた時刻）', s.by_hour), group('曜日別', s.by_weekday),
       group('ナンピン・増し玉別（追加した建玉）', s.by_add_type), group('ナンピンした建玉群とそれ以外', s.by_nanpin_group),
       group('感情別', s.by_emotion), group('売買別', s.by_side), group('信用区分別', s.by_margin_type), group('銘柄別', s.by_symbol),
@@ -127,7 +153,8 @@
     items = {};
     $('trades').innerHTML = j.trades.length ? j.trades.map(function (t) {
       items[t.id] = t;
-      return '<tr><td>' + t.id + '<br>' + TradeEdit.button(t.id) + '<br>' + TradeEdit.copyButton(t.id) + '</td><td>' + dt(t.opened_at) + ' → ' + dt(t.closed_at) + '</td><td>' + esc(t.symbol) + ' ' + esc(t.name) + '</td>' +
+      var sw = t.horizon === 'swing' ? ' <span class="badge swing">スイング ' + t.holding_bdays + '日</span>' : '';
+      return '<tr><td>' + t.id + sw + '<br>' + TradeEdit.button(t.id) + '<br>' + TradeEdit.copyButton(t.id) + '</td><td>' + dt(t.opened_at) + ' → ' + dt(t.closed_at) + '</td><td>' + esc(t.symbol) + ' ' + esc(t.name) + '</td>' +
         '<td>' + esc(window.TRADE.labels[t.margin_type].label) + '</td><td class="' + t.side + '">' + (t.side === 'long' ? '買' : '売') + '</td>' +
         '<td class="num">' + yen(t.qty) + '</td><td class="num">' + t.open_price + ' → ' + t.close_price + '</td>' +
         '<td class="num ' + cls(t.net_pnl) + '">' + signed(t.net_pnl) + '</td><td class="num">' + yen(t.carry_cost) + '</td>' +

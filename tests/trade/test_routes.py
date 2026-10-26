@@ -72,7 +72,7 @@ def test_open_close_flow(client):
 def test_errors(client):
     assert client.post("/api/trade/open", json=open_body(qty=50)).status_code == 422
     r = client.post("/api/trade/open", json=open_body(qty=100000))
-    assert r.status_code == 422 and "建余力" in r.json()["detail"]
+    assert r.status_code == 422 and "余力が不足" in r.json()["detail"]
     r = client.post("/api/trade/open", json=open_body(executed_at="2026-10-19T08:30"))
     assert r.status_code == 422 and "立会時間外" in r.json()["detail"]
     r = client.post("/api/trade/close", json={"position_id": "P99999", "qty": 100, "price": 1})
@@ -165,3 +165,24 @@ def test_export_and_range(client):
     assert client.get("/api/trade/trades?from=2026-10-20").json()["stats"]["n"] == 0
     assert client.get("/api/trade/trades?from=2026-10-19&to=2026-10-19").json()["stats"]["n"] == 1
     assert len(client.get("/api/trade/export.csv?to=2026-10-18").text.strip().splitlines()) == 1
+
+
+def test_swing_route_and_filter(client):
+    b = open_body(horizon="swing", margin_type="system", entry_method="pre_close", next_wall_price=1040,
+                  earnings_date="2026-10-30", judge_stop=995)
+    r = client.post("/api/trade/open", json=b)
+    assert r.status_code == 200, r.text
+    pid = r.json()["position"]["id"]
+    assert r.json()["account"]["positions"][0]["earnings_days"] == 11
+    client.clock["now"] = jst(2026, 10, 20, 10, 0)
+    t = client.post("/api/trade/close", json={"position_id": pid, "qty": 100, "price": 1020}).json()["trade"]
+    assert t["hold_high"] == 1050 and t["hold_low"] == 950 and t["hold_range_source"] == "daily"   # 日足から自動
+    assert t["mfe_r"] == 5.0 and t["holding_bdays"] == 2
+    pid2 = client.post("/api/trade/open", json=open_body()).json()["position"]["id"]
+    client.post("/api/trade/close", json={"position_id": pid2, "qty": 100, "price": 1010})
+    assert client.get("/api/trade/trades?horizon=swing").json()["stats"]["n"] == 1
+    assert client.get("/api/trade/trades?horizon=day").json()["stats"]["n"] == 1
+    assert client.get("/api/trade/trades").json()["stats"]["n"] == 2
+    assert len(client.get("/api/trade/export.csv?horizon=swing").text.strip().splitlines()) == 2
+    bad = client.post("/api/trade/open", json=open_body(horizon="swing"))           # いちにち信用でスイング
+    assert bad.status_code == 422

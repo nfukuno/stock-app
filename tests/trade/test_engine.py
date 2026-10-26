@@ -52,7 +52,7 @@ def test_open_checks():
     acct = e.new_account(NOW)
     s = e.summary(acct, {}, NOW)
     assert s["effective_margin"] == 5_000_000 and s["buying_power"] == 16_666_667
-    with pytest.raises(e.TradeError, match="建余力"):
+    with pytest.raises(e.TradeError, match="余力が不足"):
         opened(acct, qty=10000, price=2000, stop=1990)                   # 2000万 > 余力
     with pytest.raises(e.TradeError, match="立会時間外"):
         opened(acct, at=jst(2026, 10, 19, 12, 0))
@@ -129,7 +129,7 @@ def test_stats():
 
 @pytest.mark.parametrize("kw", [
     {"qty": 150}, {"stop": 1010}, {"target": 990}, {"side": "short", "stop": 990},
-    {"tags": ["なにか"]}, {"emotion": "ふつう"}, {"margin_type": "general"},
+    {"tags": ["なにか"]}, {"emotion": "ふつう"}, {"margin_type": "nope"}, {"margin_type": "cash", "side": "short", "stop": 1010},
     {"setup": "nope"}, {"plan_basis": "   "}, {"setup": None}, {"stop": None},
 ])
 def test_order_validation(kw):
@@ -275,3 +275,55 @@ def test_entry_limit_and_payoff():
     csv_text = e.trades_csv(acct["trades"])
     lines = csv_text.strip().splitlines()
     assert lines[0].startswith("ID,建日時,返済日時") and len(lines) == 4 and "いちにち信用" in lines[1]
+
+
+def swing(**kw):
+    b = dict(horizon="swing", margin_type="system", entry_method="next_open", next_wall_price=1040,
+             next_wall_kind="節目", judge_stop=995, earnings_date=date(2026, 10, 21))
+    b.update(kw)
+    return b
+
+
+def test_swing_validation():
+    assert order(**swing()).horizon == "swing"
+    for bad in [dict(margin_type="day"), dict(entry_method=None), dict(next_wall_price=None), dict(next_wall_price=990),
+                dict(judge_stop=985), dict(judge_stop=1005), dict(entry_method="nope")]:
+        with pytest.raises(ValueError):
+            order(**swing(**bad))
+    d = order(entry_method="moc", next_wall_price=1040)          # デイトレではスイング項目を捨てる
+    assert d.entry_method is None and d.next_wall_price is None
+    with pytest.raises(ValueError, match="現物"):
+        order(margin_type="cash", side="short", stop=1010)
+
+
+def test_swing_trade_metrics():
+    acct = e.new_account(NOW)
+    p = opened(acct, **swing(stop=990, target=1040))
+    assert p["horizon"] == "swing" and p["entry_method"] == "next_open" and p["earnings_date"] == "2026-10-21"
+    at = jst(2026, 10, 22, 10, 0)
+    t = e.close_position(acct, p["id"], 100, 985, at, at, exit_type="gap_stop")
+    assert t["holding_bdays"] == 4                                    # 19, 20, 21, 22
+    assert t["stop_slip_yen"] == -500 and t["stop_slip_r"] == -0.5    # 損切り 990 → 985 で約定
+    assert t["earnings_crossed"] is True                              # 21日の決算を持ったまま越えた
+    e.edit_trade(acct, t["id"], {"hold_high": 1025, "hold_low": 984, "reverse_fee": 300}, at)
+    assert t["mfe_r"] == 2.5 and t["mae_r"] == -1.6
+    assert t["carry_total"] == t["carry_cost"] + 300 and t["net_pnl"] == t["gross_pnl"] - t["carry_total"]
+    st = e.stats(acct["trades"])
+    assert st["gap_stops"] == 1 and st["earnings_crossed"] == 1 and st["avg_hold_bdays"] == 4
+    assert {g["key"] for g in st["by_horizon"]} == {"スイング"} and st["by_entry_method"][0]["key"] == "翌日寄り"
+    assert "保有営業日数" in e.trades_csv(acct["trades"])
+
+
+def test_cash_and_general_positions():
+    acct = e.new_account(NOW)
+    c_pos = opened(acct, margin_type="cash", qty=4000, price=1000, stop=990)     # 現物 400万 → 代金全額が必要
+    assert c_pos["expiry_date"] is None
+    s = e.summary(acct, {"7203.T": 1000}, NOW)
+    assert s["cash_power"] == 1_000_000 and s["maintenance_rate"] is None        # 信用建玉なし → 維持率なし
+    with pytest.raises(e.TradeError, match="余力が不足"):
+        opened(acct, margin_type="cash", qty=1100, price=1000, stop=990)
+    g = opened(acct, margin_type="general", qty=100, price=1000, stop=990)
+    assert g["expiry_date"] is None
+    assert e.apply_forced(acct, jst(2028, 1, 4, 16, 0), lambda s, d: 1000) == []  # 期日なしは強制返済しない
+    t = e.close_position(acct, g["id"], 100, 1010, jst(2026, 10, 30, 10, 0), jst(2026, 10, 30, 10, 0))
+    assert t["carry_cost"] > 0                                                   # 一般信用の買方金利

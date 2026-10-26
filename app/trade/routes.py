@@ -97,6 +97,7 @@ def _static_version() -> int:
 
 def _ctx() -> dict:
     return {"margin_types": config.MARGIN_TYPES, "tags": config.TAGS, "emotions": config.EMOTIONS, "exit_types": config.EXIT_TYPES, "rr_base": config.RR_BASE,
+            "horizons": config.HORIZONS, "entry_methods": config.ENTRY_METHODS, "wall_kinds": config.WALL_KINDS,
             "setups": config.SETUPS, "plan_max": config.PLAN_TEXT_MAX,
             "lot": config.LOT, "memo_max": config.MEMO_MAX, "v": _static_version()}
 
@@ -151,6 +152,7 @@ def api_close(body: CloseIn):
                                    exit_type=body.exit_type)
     except engine.TradeError as e:
         raise _err(e)
+    fill_hold_range(tr)
     _save(store, acct, f"close {tr['id']} {tr['symbol']} {tr['qty']}@{tr['close_price']} {tr['net_pnl']:+,}")
     return {"trade": tr, "account": _view(acct)}
 
@@ -165,6 +167,8 @@ def api_close_group(body: CloseGroupIn):
                                     body.exit_type)
     except engine.TradeError as e:
         raise _err(e)
+    for t in trades:
+        fill_hold_range(t)
     net = sum(t["net_pnl"] for t in trades)
     _save(store, acct, f"close {','.join(t['id'] for t in trades)} {trades[0]['symbol']} {body.qty}@{body.price} {net:+,}")
     return {"trades": trades, "account": _view(acct)}
@@ -205,23 +209,44 @@ def api_reset(body: ResetIn):
     return _view(acct)
 
 
-def _in_range(trades: list[dict], date_from: str | None, date_to: str | None) -> list[dict]:
-    return [t for t in trades if (not date_from or t["close_date"] >= date_from) and (not date_to or t["close_date"] <= date_to)]
+def _in_range(trades: list[dict], date_from: str | None, date_to: str | None, horizon: str | None = None) -> list[dict]:
+    return [t for t in trades if (not date_from or t["close_date"] >= date_from) and (not date_to or t["close_date"] <= date_to)
+            and (not horizon or (t.get("horizon") or "day") == horizon)]
+
+
+def fill_hold_range(t: dict) -> None:
+    """スイングの約定に、保有期間の日足から最高値・最安値を入れる（MFE/MAE 用）。
+    建日・返済日の全値幅を含む概算。手入力済みなら上書きしない。"""
+    if (t.get("horizon") or "day") != "swing" or t.get("hold_high") is not None:
+        return
+    od, cd = date.fromisoformat(t["open_date"]), date.fromisoformat(t["close_date"])
+    try:
+        df = market.fetch_daily(t["symbol"], max(10, engine.trading_days_between(od, market.now_jst().date()) + 5))
+    except Exception:
+        return
+    rows = df[[od <= d <= cd for d in df.index]]
+    if rows.empty:
+        return
+    t["hold_high"], t["hold_low"] = round(float(rows["high"].max()), 1), round(float(rows["low"].min()), 1)
+    t["hold_range_source"] = "daily"
+    engine._derive(t)
 
 
 @router.get("/api/trade/trades")
-def api_trades(date_from: str | None = Query(None, alias="from"), date_to: str | None = Query(None, alias="to")):
+def api_trades(date_from: str | None = Query(None, alias="from"), date_to: str | None = Query(None, alias="to"),
+               horizon: str | None = None):
     acct = _load(tstore.get_store())
-    trades = _in_range(acct["trades"], date_from, date_to)
+    trades = _in_range(acct["trades"], date_from, date_to, horizon)
     return {"account_id": acct["id"], "initial_cash": acct["initial_cash"], "rr_base": config.RR_BASE,
             "trades": list(reversed(trades)), "stats": engine.stats(trades)}
 
 
 @router.get("/api/trade/export.csv")
-def api_export_csv(date_from: str | None = Query(None, alias="from"), date_to: str | None = Query(None, alias="to")):
+def api_export_csv(date_from: str | None = Query(None, alias="from"), date_to: str | None = Query(None, alias="to"),
+                   horizon: str | None = None):
     """約定履歴の CSV（Excel や ChatGPT / Claude にそのまま渡せるよう UTF-8 BOM 付き）。"""
     acct = _load(tstore.get_store())
-    body = "\ufeff" + engine.trades_csv(_in_range(acct["trades"], date_from, date_to))
-    name = f"trades_{acct['id']}_{date_from or 'all'}_{date_to or 'all'}.csv"
+    body = "\ufeff" + engine.trades_csv(_in_range(acct["trades"], date_from, date_to, horizon))
+    name = f"trades_{acct['id']}_{horizon or 'all'}_{date_from or 'all'}_{date_to or 'all'}.csv"
     return Response(body, media_type="text/csv; charset=utf-8",
                     headers={"Content-Disposition": f'attachment; filename="{name}"'})

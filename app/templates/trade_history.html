@@ -13,12 +13,22 @@
   .long { color:var(--up); font-weight:600; } .short { color:var(--down); font-weight:600; }
   .table-wrap th, .table-wrap td { white-space:nowrap; } .table-wrap td.wrap { white-space:normal; min-width:220px; }
   .toolbar { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .tabs { display:flex; } .tabs input { display:none; }
+  .tabs label span { display:block; padding:6px 16px; border:1px solid var(--line); border-left:0; cursor:pointer; font-weight:600; }
+  .tabs label:first-child span { border-left:1px solid var(--line); border-radius:8px 0 0 8px; } .tabs label:last-child span { border-radius:0 8px 8px 0; }
+  .tabs input:checked + span { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .badge.swing { background:#fbefd0; }
   .table-wrap { overflow-x:auto; } svg text { font-size:11px; fill:var(--muted); }
 </style>
 {% endblock %}
 {% block body %}
 <h1>トレード分析 <span class="muted" style="font-size:13px;font-weight:400" id="acct"></span></h1>
 <div class="card toolbar">
+  <div class="tabs" role="tablist" aria-label="時間軸">
+    <label><input type="radio" name="hz" value="" checked><span>すべて</span></label>
+    <label><input type="radio" name="hz" value="day"><span>デイトレ</span></label>
+    <label><input type="radio" name="hz" value="swing"><span>スイング</span></label>
+  </div>
   <label>期間（返済日） <input type="date" id="from"> 〜 <input type="date" id="to"></label>
   <button type="button" id="csv">CSV ダウンロード</button>
   <button type="button" id="copysum">成績サマリーをコピー</button>
@@ -35,7 +45,7 @@
     <tbody id="trades"></tbody>
   </table></div>
 </div>
-<script>window.TRADE = {labels: {{ margin_types | tojson }}, tags: {{ tags | tojson }}, emotions: {{ emotions | tojson }}, memo_max: {{ memo_max }}, exit_types: {{ exit_types | tojson }}, rr_base: {{ rr_base }}, setups: {{ setups | tojson }}, plan_max: {{ plan_max }}};</script>
+<script>window.TRADE = {labels: {{ margin_types | tojson }}, tags: {{ tags | tojson }}, emotions: {{ emotions | tojson }}, memo_max: {{ memo_max }}, exit_types: {{ exit_types | tojson }}, rr_base: {{ rr_base }}, setups: {{ setups | tojson }}, plan_max: {{ plan_max }}, horizons: {{ horizons | tojson }}, entry_methods: {{ entry_methods | tojson }}, wall_kinds: {{ wall_kinds | tojson }}};</script>
 <script src="/static/js/trade_edit.js?v={{ v }}"></script>
 <script src="/static/js/trade_history.js?v={{ v }}"></script>
 {% endblock %}
