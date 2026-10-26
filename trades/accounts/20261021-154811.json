@@ -3,32 +3,8 @@
   "id": "20261021-154811",
   "created_at": "2026-10-21T15:48:11+09:00",
   "initial_cash": 5000000,
-  "seq": 37,
-  "positions": [
-    {
-      "id": "P00037",
-      "symbol": "5801.T",
-      "name": "古河電気工業",
-      "margin_type": "day",
-      "side": "long",
-      "qty": 100,
-      "initial_qty": 100,
-      "open_price": 2894.0,
-      "opened_at": "2026-10-26T09:14:01+09:00",
-      "open_date": "2026-10-26",
-      "entered_at": "2026-10-26T09:14:01+09:00",
-      "expiry_date": "2026-10-26",
-      "stop": 2880.0,
-      "target": 2932.0,
-      "tags": [
-        "押し目"
-      ],
-      "emotion": "",
-      "memo": "",
-      "add_type": null,
-      "nanpin_group": false
-    }
-  ],
+  "seq": 38,
+  "positions": [],
   "trades": [
     {
       "id": "T00002",
@@ -847,6 +823,43 @@
       "r_multiple": -1.0,
       "planned_rr": 1.2,
       "beyond_stop": false
+    },
+    {
+      "id": "T00038",
+      "position_id": "P00037",
+      "symbol": "5801.T",
+      "name": "古河電気工業",
+      "margin_type": "day",
+      "side": "long",
+      "qty": 100,
+      "open_price": 2894.0,
+      "close_price": 2862.5,
+      "opened_at": "2026-10-26T09:14:01+09:00",
+      "closed_at": "2026-10-26T09:23:33+09:00",
+      "open_date": "2026-10-26",
+      "close_date": "2026-10-26",
+      "entered_at": "2026-10-26T09:23:33+09:00",
+      "holding_minutes": 9,
+      "commission": 0,
+      "stop": 2880.0,
+      "target": 2932.0,
+      "tags": [
+        "押し目"
+      ],
+      "emotion": "",
+      "memo": "",
+      "exit_memo": "2940",
+      "exit_reason": "manual",
+      "exit_type": "plan_target",
+      "add_type": null,
+      "nanpin_group": false,
+      "gross_pnl": -3150,
+      "carry_cost": 0,
+      "carry_days": 0,
+      "net_pnl": -3150,
+      "r_multiple": -2.25,
+      "planned_rr": 2.71,
+      "beyond_stop": true
     }
   ]
 }
