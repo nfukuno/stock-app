@@ -139,6 +139,8 @@ def open_position(acct: dict, o, at: datetime, now: datetime, name: str, prices:
         "entered_at": now.isoformat(timespec="seconds"),
         "expiry_date": (expiry_date(at.date(), mt["expiry_months"]) if mt["expiry_months"] else at.date()).isoformat(),
         "stop": o.stop, "target": o.target, "tags": o.tags, "emotion": o.emotion, "memo": o.memo,
+        "setup": o.setup, "plan_basis": o.plan_basis, "plan_exit_rule": o.plan_exit_rule,
+        "plan_target_basis": o.plan_target_basis,
         "add_type": add_type, "nanpin_group": add_type == "nanpin",
     }
     acct["positions"].append(pos)
@@ -170,6 +172,8 @@ def close_position(acct: dict, position_id: str, qty: int, price: float, at: dat
         "commission": c.MARGIN_TYPES[pos["margin_type"]]["commission"],
         "stop": pos.get("stop"), "target": pos.get("target"),
         "tags": pos["tags"], "emotion": pos["emotion"], "memo": pos["memo"], "exit_memo": memo,
+        "setup": pos.get("setup"), "plan_basis": pos.get("plan_basis", ""), "plan_exit_rule": pos.get("plan_exit_rule", ""),
+        "plan_target_basis": pos.get("plan_target_basis", ""),
         "exit_reason": reason, "exit_type": exit_type, "add_type": pos.get("add_type"), "nanpin_group": bool(pos.get("nanpin_group")),
     }
     _derive(trade)
@@ -195,7 +199,8 @@ def _derive(t: dict) -> None:
 
 
 # ---------------------------------------------------------------- 後からの修正・追記
-POSITION_FIELDS = {"open_price", "opened_at", "stop", "target", "tags", "emotion", "memo"}
+POSITION_FIELDS = {"open_price", "opened_at", "stop", "target", "tags", "emotion", "memo",
+                   "setup", "plan_basis", "plan_exit_rule", "plan_target_basis"}
 TRADE_FIELDS = POSITION_FIELDS | {"close_price", "closed_at", "exit_memo", "exit_type"}
 
 
@@ -375,6 +380,19 @@ def _group(trades: list[dict]) -> dict:
             "avg_r": sum(rs) / len(rs) if rs else None}
 
 
+def setup_label(t: dict) -> str:
+    """型の表示名（買い・売りで名前が変わる）。3行メモ導入前の記録は「未設定」。"""
+    names = c.SETUPS.get(t.get("setup") or "")
+    return names[0 if t["side"] == "long" else 1] if names else "未設定"
+
+
+def rr_rule_label(t: dict) -> str:
+    rr = t.get("planned_rr")
+    if rr is None:
+        return "RR 未計算"
+    return f"RR {c.RR_BASE} 以上（基準どおり）" if rr >= c.RR_BASE else f"RR {c.RR_BASE} 未満（基準違反）"
+
+
 def exit_type_label(t: dict) -> str:
     if t["exit_reason"] != "manual":
         return "強制返済"
@@ -432,6 +450,9 @@ def stats(trades: list[dict]) -> dict:
         "by_weekday": by(lambda t: WEEKDAYS[date.fromisoformat(t["open_date"]).weekday()], WEEKDAYS.index),
         "by_emotion": by(lambda t: t["emotion"] or "(なし)"),
         "by_symbol": by(lambda t: f"{t['symbol']} {t['name']}".strip()),
+        "by_setup": by(setup_label),
+        "by_rr_rule": by(rr_rule_label),
+        "below_rr_base": sum(1 for t in ts if t.get("planned_rr") is not None and t["planned_rr"] < c.RR_BASE),
         "by_exit_type": by(exit_type_label, [*c.EXIT_TYPES.values(), "強制返済", "未分類"].index),
         "unclassified_exits": sum(1 for t in ts if exit_type_label(t) == "未分類"),
         "by_add_type": by(lambda t: ADD_LABELS[t.get("add_type")], list(ADD_LABELS.values()).index),
@@ -459,6 +480,8 @@ CSV_COLUMNS = [
     ("損益(金利等込)", lambda t: t["net_pnl"]), ("金利等", lambda t: t["carry_cost"]),
     ("R倍数", lambda t: t.get("r_multiple")), ("損切りライン", lambda t: t.get("stop")),
     ("利確目標", lambda t: t.get("target")), ("計画RR", lambda t: t.get("planned_rr")),
+    ("型", setup_label), ("根拠", lambda t: t.get("plan_basis") or ""),
+    ("無効化の条件", lambda t: t.get("plan_exit_rule") or ""), ("目標の根拠", lambda t: t.get("plan_target_basis") or ""),
     (f"上限価格(RR{c.RR_BASE})", lambda t: entry_limit(t.get("stop"), t.get("target"))),
     ("保有分", lambda t: t["holding_minutes"]), ("理由タグ", lambda t: "・".join(t.get("tags") or [])),
     ("感情", lambda t: t.get("emotion") or ""), ("決済理由", lambda t: exit_type_label(t)),

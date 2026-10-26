@@ -34,6 +34,7 @@ def client(tmp_path, monkeypatch):
 
 def open_body(**kw):
     b = {"symbol": "7203", "margin_type": "day", "side": "long", "qty": 100, "price": 1000, "stop": 990,
+         "target": 1030, "setup": "breakout", "plan_basis": "5MA 上抜け",
          "tags": ["押し目"], "emotion": "冷静", "memo": "テスト"}
     b.update(kw)
     return b

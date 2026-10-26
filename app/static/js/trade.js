@@ -40,7 +40,7 @@
     var add = p.add_type === 'nanpin' ? ' <span class="badge warn">ナンピン</span>' : p.add_type === 'pyramid' ? ' <span class="badge">増し玉</span>' : '';
     items[p.id] = { kind: 'position', obj: p };
     return '<tr' + (single ? '' : ' class="member"') + '><td>' + p.id + '<br>' + TradeEdit.button(p.id) + '</td><td>' + esc(p.symbol) + ' ' + esc(p.name) + add +
-      TradeEdit.badge(p) + '<div class="memo-line">' + (p.memo ? '📝 ' + esc(p.memo) : 'メモ未入力（✎ 編集から追記できます）') + '</div></td><td>' + esc(p.label) + '</td>' +
+      TradeEdit.badge(p) + '<div class="memo-line">' + TradeEdit.planLine(p) + '</div></td><td>' + esc(p.label) + '</td>' +
       '<td class="' + p.side + '">' + (p.side === 'long' ? '買' : '売') + '</td><td class="num">' + yen(p.qty) + '</td>' +
       '<td class="num">' + p.open_price + '</td><td class="num">' + (p.last == null ? '-' : p.last) + '</td>' +
       '<td class="num ' + cls(p.unrealized) + '">' + signed(p.unrealized) + '</td><td class="num">' + yen(p.accrued_cost) + '</td>' +
@@ -137,15 +137,51 @@
 
   // ---- 新規注文
   var form = $('openform');
-  function updatePreview() {
-    var q = +form.qty.value, p = +form.price.value, s = +form.stop.value, t = +form.target.value;
-    var long = form.side.value === 'long';
-    if (!q || !p) { $('preview').textContent = ''; return; }
-    var parts = ['約定代金 ' + yen(q * p) + ' 円', '必要保証金 ' + yen(q * p * 0.3) + ' 円'];
-    if (s) parts.push('損切り時 ' + signed((s - p) * q * (long ? 1 : -1)) + ' 円');
-    if (s && t) parts.push('RR ' + (Math.abs(t - p) / Math.abs(p - s)).toFixed(2));
-    $('preview').textContent = parts.join(' / ');
+  // 3行メモ: 買い・売りで表示名・ヒントを切り替え、RR と上限（下限）価格を計算する
+  var RR = T.rr_base || 1.5;
+  var HINT = {
+    long: { hint: '買い: 損切りは建値より下、目標は上', basis: '例: 5分足が 5MA を上抜けて確定、上値 3,830 を突破',
+            rule: '例: 5分足が 3,815 を割って確定したら撤退（任意）', tgt: '例: 本日高値 3,884（任意）', limit: '上限価格', cmp: '以下で買えば' },
+    short: { hint: '売り: 損切りは建値より上、目標は下', basis: '例: 5分足が VWAP で跳ね返されて確定、戻り高値 2,520 の下',
+             rule: '例: 5分足が 2,520 を超えて確定したら撤退（任意）', tgt: '例: 本日安値 2,440（任意）', limit: '下限価格', cmp: '以上で売れば' },
+  };
+  function planLabels() {
+    var side = form.side.value, h = HINT[side];
+    $('planhint').textContent = h.hint;
+    $('plan_basis').placeholder = h.basis;
+    $('plan_exit_rule').placeholder = h.rule;
+    $('plan_target_basis').placeholder = h.tgt;
+    $('stop').placeholder = '損切り価格（建値より' + (side === 'long' ? '下' : '上') + '）';
+    $('target').placeholder = '目標価格（建値より' + (side === 'long' ? '上' : '下') + '）';
+    Array.prototype.forEach.call($('setup').options, function (o) {
+      if (o.value) o.textContent = T.setups[o.value][side === 'long' ? 0 : 1];
+    });
   }
+
+  // 計画の評価。null = まだ判定できない
+  function planCheck() {
+    var p = +form.price.value, sp = +form.stop.value, tp = +form.target.value, long = form.side.value === 'long';
+    var h = HINT[form.side.value];
+    if (!sp || !tp) return { text: '損切りと目標を入れると、RR と' + h.limit + 'を表示します。', cls: '' };
+    if ((tp - sp) * (long ? 1 : -1) <= 0) return { text: (long ? '買いは目標を損切りより上に' : '売りは目標を損切りより下に') + '置いてください。', cls: 'ng', bad: true };
+    var limit = Math.round((sp + (tp - sp) / (1 + RR)) * 10) / 10;
+    var head = h.limit + ' ' + yen1(limit) + '（この価格' + h.cmp + ' RR ' + RR + ' 以上）';
+    if (!p) return { text: head, cls: '' };
+    var risk = (p - sp) * (long ? 1 : -1), reward = (tp - p) * (long ? 1 : -1);
+    if (risk <= 0) return { text: '損切りは建値より' + (long ? '下' : '上') + 'に置いてください。', cls: 'ng', bad: true };
+    if (reward <= 0) return { text: '目標は建値より' + (long ? '上' : '下') + 'に置いてください。', cls: 'ng', bad: true };
+    var rr = reward / risk, q = +form.qty.value || 0;
+    var tail = ' ／ 損切り時 ' + signed(-risk * q) + ' 円 ／ 約定代金 ' + yen(q * p) + ' 円（必要保証金 ' + yen(q * p * 0.3) + ' 円）';
+    return { text: '計画RR ' + rr.toFixed(2) + (rr >= RR ? ' ✅ ' : ' ⚠ 基準 ' + RR + ' 未満 ') + '／ ' + head + tail, cls: rr >= RR ? 'ok' : 'ng', rr: rr };
+  }
+  function yen1(v) { return v.toLocaleString('ja-JP', { maximumFractionDigits: 1 }); }
+  function updatePreview() {
+    var c = planCheck();
+    $('planout').textContent = c.text;
+    $('planout').className = 'planout ' + c.cls;
+  }
+  Array.prototype.forEach.call(form.querySelectorAll('[name=side]'), function (r) { r.addEventListener('change', function () { planLabels(); updatePreview(); }); });
+  planLabels();
   form.addEventListener('input', updatePreview);
 
   $('symbol').addEventListener('change', function () {
@@ -162,17 +198,21 @@
     var b = {
       symbol: form.symbol.value, name: form.name.value, margin_type: form.margin_type.value, side: form.side.value,
       qty: +form.qty.value, price: +form.price.value, executed_at: form.executed_at.value || null,
-      stop: form.stop.value ? +form.stop.value : null, target: form.target.value ? +form.target.value : null,
+      stop: +form.stop.value, target: +form.target.value,
+      setup: form.setup.value, plan_basis: form.plan_basis.value, plan_exit_rule: form.plan_exit_rule.value,
+      plan_target_basis: form.plan_target_basis.value,
       emotion: form.emotion.value, memo: form.memo.value,
       tags: Array.prototype.filter.call(form.querySelectorAll('[name=tags]'), function (x) { return x.checked; }).map(function (x) { return x.value; }),
     };
-    if (!b.stop && !confirm('損切りラインが未設定です（R倍数が計算できません）。このまま発注しますか？')) return;
+    var c = planCheck();
+    if (c.bad) { msg($('openmsg'), c.text); return; }
+    if (c.rr != null && c.rr < RR && !confirm('計画RR ' + c.rr.toFixed(2) + ' は基準 ' + RR + ' 未満です。\n原則は「見送る」か「' + HINT[form.side.value].limit + 'まで待つ」です。\nそれでも記録しますか？（分析で「基準違反」として集計されます）')) return;
     var btn = form.querySelector('button[type=submit]');
     btn.disabled = true;
     api('POST', '/api/trade/open', b).then(function (r) {
       var p = r.position;
       msg($('openmsg'), p.id + ' ' + p.symbol + ' ' + (p.side === 'long' ? '買' : '売') + ' ' + p.qty + '株 @' + p.open_price + ' を建てました', true);
-      form.reset(); $('symname').placeholder = '自動取得'; updatePreview();
+      form.reset(); $('symname').placeholder = '自動取得'; planLabels(); updatePreview();
       render(r.account);
     }).catch(function (e) { msg($('openmsg'), e.message); }).finally(function () { btn.disabled = false; });
   });

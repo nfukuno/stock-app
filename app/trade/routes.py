@@ -97,6 +97,7 @@ def _static_version() -> int:
 
 def _ctx() -> dict:
     return {"margin_types": config.MARGIN_TYPES, "tags": config.TAGS, "emotions": config.EMOTIONS, "exit_types": config.EXIT_TYPES, "rr_base": config.RR_BASE,
+            "setups": config.SETUPS, "plan_max": config.PLAN_TEXT_MAX,
             "lot": config.LOT, "memo_max": config.MEMO_MAX, "v": _static_version()}
 
 
