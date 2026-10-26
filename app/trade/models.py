@@ -27,8 +27,13 @@ class OpenIn(BaseModel):
     qty: int = Field(gt=0)
     price: float = Field(gt=0)
     executed_at: datetime | None = None        # 省略時は現在時刻
-    stop: float | None = Field(default=None, gt=0)
-    target: float | None = Field(default=None, gt=0)
+    # 3行メモ（必須）: 型と根拠 / 無効化（損切り）/ 目標
+    setup: str
+    plan_basis: str = Field(min_length=1, max_length=c.PLAN_TEXT_MAX)
+    stop: float = Field(gt=0)
+    plan_exit_rule: str = Field(default="", max_length=c.PLAN_TEXT_MAX)
+    target: float = Field(gt=0)
+    plan_target_basis: str = Field(default="", max_length=c.PLAN_TEXT_MAX)
     tags: list[str] = Field(default_factory=list)
     emotion: str = ""
     memo: str = Field(default="", max_length=c.MEMO_MAX)
@@ -43,6 +48,21 @@ class OpenIn(BaseModel):
     def _lot(cls, v):
         if v % c.LOT:
             raise ValueError(f"株数は {c.LOT} 株単位です")
+        return v
+
+    @field_validator("setup")
+    @classmethod
+    def _setup(cls, v):
+        if v not in c.SETUPS:
+            raise ValueError("型を選んでください")
+        return v
+
+    @field_validator("plan_basis", "plan_exit_rule", "plan_target_basis")
+    @classmethod
+    def _strip(cls, v, info):
+        v = v.strip()
+        if info.field_name == "plan_basis" and not v:
+            raise ValueError("3行メモの根拠を入力してください")
         return v
 
     @field_validator("tags")
@@ -127,7 +147,7 @@ class CloseGroupIn(BaseModel):
 
 
 class EditIn(BaseModel):
-    """後からの修正・追記。送った項目だけ変更する（stop / target は null で解除）。"""
+    """後からの修正・追記。送った項目だけ変更する（null は「変更しない」）。"""
     open_price: float | None = Field(default=None, gt=0)
     close_price: float | None = Field(default=None, gt=0)
     stop: float | None = Field(default=None, gt=0)
@@ -139,6 +159,24 @@ class EditIn(BaseModel):
     opened_at: datetime | None = None
     closed_at: datetime | None = None
     exit_type: str | None = None
+    setup: str | None = None
+    plan_basis: str | None = Field(default=None, max_length=c.PLAN_TEXT_MAX)
+    plan_exit_rule: str | None = Field(default=None, max_length=c.PLAN_TEXT_MAX)
+    plan_target_basis: str | None = Field(default=None, max_length=c.PLAN_TEXT_MAX)
+
+    @field_validator("setup")
+    @classmethod
+    def _setup(cls, v):
+        if v is not None and v not in c.SETUPS:
+            raise ValueError("型が不正です")
+        return v
+
+    @field_validator("plan_basis")
+    @classmethod
+    def _basis(cls, v):
+        if v is not None and not v.strip():
+            raise ValueError("3行メモの根拠は空にできません")
+        return v if v is None else v.strip()
 
     @field_validator("exit_type")
     @classmethod
@@ -164,9 +202,11 @@ class EditIn(BaseModel):
 
     def changes(self) -> dict:
         d = self.model_dump(exclude_unset=True)
-        for k in ("open_price", "close_price", "tags", "emotion", "memo", "exit_memo", "opened_at", "closed_at", "exit_type"):
+        # 必須項目は null なら変更しない（3行メモの損切り・目標も消せない）
+        for k in ("open_price", "close_price", "tags", "emotion", "memo", "exit_memo", "opened_at", "closed_at", "exit_type",
+                  "stop", "target", "setup", "plan_basis", "plan_exit_rule", "plan_target_basis"):
             if k in d and d[k] is None:
-                del d[k]                       # 必須項目は null なら変更しない
+                del d[k]
         return d
 
 

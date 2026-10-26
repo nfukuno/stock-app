@@ -75,7 +75,8 @@
         ' ／ 最大DD ' + yen(s.max_drawdown) + '円 ／ 最大連敗 ' + s.max_loss_streak,
       '損切り設定率 ' + pct(s.stop_set_rate) + ' ／ 損切りライン超え ' + s.beyond_stop + '件 ／ ナンピン ' + s.nanpin_count + '回 ／ 決済理由未分類 ' + s.unclassified_exits + '件',
       '',
-      rows('■決済理由別', s.by_exit_type), rows('■エントリー理由別', s.by_tag), rows('■時間帯別', s.by_hour),
+      rows('■型別', s.by_setup), rows('■RR 基準を守ったか', s.by_rr_rule),
+      rows('■決済理由別', s.by_exit_type), rows('■補足タグ別', s.by_tag), rows('■時間帯別', s.by_hour),
       rows('■感情別', s.by_emotion), rows('■売買別', s.by_side),
       '',
       '※ 約定ごとの詳細は CSV を添付します。来週の重点ルールを1つ提案してください。',
@@ -111,13 +112,15 @@
       ['損切りライン超えの決済', s.beyond_stop + '件', s.beyond_stop ? 'neg' : ''],
       ['ナンピン', s.nanpin_count + '回', s.nanpin_count ? 'neg' : ''],
       ['決済理由が未分類', s.unclassified_exits + '件', s.unclassified_exits ? 'neg' : ''],
+      ['RR 基準未満で入った', s.below_rr_base + '件', s.below_rr_base ? 'neg' : ''],
     ];
     $('kpis').innerHTML = k.map(function (x) {
       return '<div class="kpi"><div class="l">' + x[0] + '</div><div class="v ' + (x[2] || '') + '">' + x[1] + '</div></div>';
     }).join('');
     $('curve').innerHTML = curve(s.curve);
     $('groups').innerHTML = [
-      group('決済理由別', s.by_exit_type), group('エントリー理由別', s.by_tag), group('時間帯別（建てた時刻）', s.by_hour), group('曜日別', s.by_weekday),
+      group('型別（3行メモ）', s.by_setup), group('RR 基準を守ったか', s.by_rr_rule),
+      group('決済理由別', s.by_exit_type), group('補足タグ別', s.by_tag), group('時間帯別（建てた時刻）', s.by_hour), group('曜日別', s.by_weekday),
       group('ナンピン・増し玉別（追加した建玉）', s.by_add_type), group('ナンピンした建玉群とそれ以外', s.by_nanpin_group),
       group('感情別', s.by_emotion), group('売買別', s.by_side), group('信用区分別', s.by_margin_type), group('銘柄別', s.by_symbol),
     ].join('');
@@ -129,13 +132,13 @@
         '<td class="num">' + yen(t.qty) + '</td><td class="num">' + t.open_price + ' → ' + t.close_price + '</td>' +
         '<td class="num ' + cls(t.net_pnl) + '">' + signed(t.net_pnl) + '</td><td class="num">' + yen(t.carry_cost) + '</td>' +
         '<td class="num">' + (t.r_multiple == null ? '-' : t.r_multiple.toFixed(2)) + '</td>' +
-        '<td>' + esc((t.tags || []).join('・')) + (t.emotion ? ' / ' + esc(t.emotion) : '') +
+        '<td>' + esc(TradeEdit.setupName(t)) + ((t.tags || []).length ? ' / ' + esc(t.tags.join('・')) : '') + (t.emotion ? ' / ' + esc(t.emotion) : '') +
         (t.exit_reason !== 'manual' ? ' <span class="badge late">強制返済</span>'
           : t.exit_type ? ' <span class="badge">' + esc(window.TRADE.exit_types[t.exit_type]) + '</span>' : ' <span class="badge warn">決済理由未分類</span>') +
         (t.beyond_stop ? ' <span class="badge warn">損切り超え</span>' : '') +
         (t.add_type === 'nanpin' ? ' <span class="badge warn">ナンピン</span>' : t.add_type === 'pyramid' ? ' <span class="badge">増し玉</span>' : '') +
         TradeEdit.badge(t) + '</td>' +
-        '<td class="wrap">' + esc(t.memo) + (t.exit_memo ? '<br><span class="muted">' + esc(t.exit_memo) + '</span>' : '') + '</td></tr>';
+        '<td class="wrap">' + (t.plan_basis ? '<b>' + esc(t.plan_basis) + '</b><br>' : '') + esc(t.memo) + (t.exit_memo ? '<br><span class="muted">' + esc(t.exit_memo) + '</span>' : '') + '</td></tr>';
     }).join('') : '<tr><td colspan="12" class="muted">まだ返済した取引がありません</td></tr>';
   }).catch(function (e) { $('kpis').textContent = '読み込みに失敗しました: ' + e.message; });
   }

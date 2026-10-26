@@ -15,15 +15,22 @@ window.TradeEdit = (function () {
       '<label>建日時<input name="opened_at" type="datetime-local" step="1" required></label>' +
       '<label class="only-trade">返済日時<input name="closed_at" type="datetime-local" step="1"></label>' +
       '<label class="only-trade">返済価格<input name="close_price" type="number" step="0.1" min="0.1"></label>' +
-      '<label>損切りライン<input name="stop" type="number" step="0.1" min="0.1"></label>' +
-      '<label>利確目標<input name="target" type="number" step="0.1" min="0.1"></label>' +
       '<label>感情<select name="emotion"><option value="">-</option>' +
       T.emotions.map(function (e) { return '<option>' + esc(e) + '</option>'; }).join('') + '</select></label>' +
       '</div>' +
-      '<div class="muted" style="font-size:12px;margin:8px 0 4px">エントリー理由</div><div class="chips">' +
+      '<fieldset class="eplan"><legend>3行メモ</legend>' +
+      '<div class="egrid">' +
+      '<label>① 型<select name="setup" required></select></label>' +
+      '<label class="wide">根拠<input name="plan_basis" required maxlength="' + T.plan_max + '"></label>' +
+      '<label>② 損切り価格<input name="stop" type="number" step="0.1" min="0.1" required></label>' +
+      '<label class="wide">無効化の条件<input name="plan_exit_rule" maxlength="' + T.plan_max + '"></label>' +
+      '<label>③ 目標価格<input name="target" type="number" step="0.1" min="0.1" required></label>' +
+      '<label class="wide">目標の根拠<input name="plan_target_basis" maxlength="' + T.plan_max + '"></label>' +
+      '</div></fieldset>' +
+      '<div class="muted" style="font-size:12px;margin:8px 0 4px">補足タグ</div><div class="chips">' +
       T.tags.map(function (t) { return '<label><input type="checkbox" name="tags" value="' + esc(t) + '">' + esc(t) + '</label>'; }).join('') +
       '</div>' +
-      '<label class="blk">メモ（根拠・シナリオ・振り返り）<textarea name="memo" rows="4" maxlength="' + T.memo_max + '"></textarea></label>' +
+      '<label class="blk">メモ（シナリオ・振り返り）<textarea name="memo" rows="4" maxlength="' + T.memo_max + '"></textarea></label>' +
       '<label class="blk only-trade">決済理由<select name="exit_type"><option value="">未分類</option>' +
       Object.keys(T.exit_types).map(function (k) { return '<option value="' + k + '">' + esc(T.exit_types[k]) + '</option>'; }).join('') + '</select></label>' +
       '<label class="blk only-trade">決済メモ<textarea name="exit_memo" rows="2" maxlength="' + T.memo_max + '"></textarea></label>' +
@@ -49,6 +56,8 @@ window.TradeEdit = (function () {
     var b = {
       open_price: num(form.open_price.value), stop: num(form.stop.value), target: num(form.target.value),
       emotion: form.emotion.value, memo: form.memo.value,
+      setup: form.setup.value || null, plan_basis: form.plan_basis.value, plan_exit_rule: form.plan_exit_rule.value,
+      plan_target_basis: form.plan_target_basis.value,
       tags: Array.prototype.filter.call(form.querySelectorAll('[name=tags]'), function (x) { return x.checked; }).map(function (x) { return x.value; }),
     };
     if (trade) { b.close_price = num(form.close_price.value); b.exit_memo = form.exit_memo.value; b.exit_type = form.exit_type.value; }
@@ -85,6 +94,17 @@ window.TradeEdit = (function () {
     form.opened_at.value = local(obj.opened_at);
     form.closed_at.value = trade ? local(obj.closed_at) : '';
     form.close_price.value = trade ? obj.close_price : '';
+    var si = obj.side === 'long' ? 0 : 1;
+    form.setup.innerHTML = (obj.setup ? '' : '<option value="">未設定（選んでください）</option>') +
+      Object.keys(T.setups).map(function (k) { return '<option value="' + k + '">' + esc(T.setups[k][si]) + '</option>'; }).join('');
+    form.setup.value = obj.setup || '';
+    form.plan_basis.value = obj.plan_basis || '';
+    form.plan_exit_rule.value = obj.plan_exit_rule || '';
+    form.plan_target_basis.value = obj.plan_target_basis || '';
+    // 3行メモ導入前の記録は空でも保存できるように、元が空なら必須を外す
+    form.setup.required = !!obj.setup; form.plan_basis.required = !!obj.plan_basis;
+    form.stop.required = obj.stop != null; form.target.required = obj.target != null;
+    form.plan_exit_rule.placeholder = obj.side === 'long' ? '例: 5分足が 3,815 を割って確定' : '例: 5分足が 2,520 を超えて確定';
     form.stop.value = obj.stop == null ? '' : obj.stop;
     form.target.value = obj.target == null ? '' : obj.target;
     form.emotion.value = obj.emotion || '';
@@ -124,18 +144,18 @@ window.TradeEdit = (function () {
     var flags = [];
     if (t.beyond_stop) flags.push('損切りラインを超えて決済');
     if (t.add_type === 'nanpin') flags.push('ナンピン');
-    if (t.planned_rr != null && t.planned_rr < RR) flags.push('計画RRが基準 ' + RR + ' 未満');
-    if (lim != null && (long ? t.open_price > lim : t.open_price < lim)) flags.push('上限価格を超えて約定');
+    if (t.planned_rr != null && t.planned_rr < RR) flags.push('計画RRが基準 ' + RR + ' 未満（' + (long ? '上限' : '下限') + '価格 ' + lim + ' を超えて約定）');
     if (t.edits && t.edits.length) flags.push('記録を後から修正');
     return [
       '【区分】リプレイ / 本番（どちらか残す）　【日付】' + t.open_date + '　【銘柄】' + t.symbol + ' ' + (t.name || '') +
         '　【売買】' + (long ? '買い' : '売り') + ' ' + t.qty + '株（' + T.labels[t.margin_type].label + '）',
       '',
       '【計画（入る前）】',
-      '型・根拠: ' + ((t.tags || []).join('・') || '未記入'),
-      'メモ: ' + (t.memo || '未記入'),
-      '損切り: ' + n(t.stop) + '　目標: ' + n(t.target) + '　計画RR: ' + n(t.planned_rr) +
-        '　上限価格(RR' + RR + '): ' + n(lim),
+      '① 型・根拠: ' + setupName(t) + (t.plan_basis ? '　' + t.plan_basis : '　（根拠未記入）'),
+      '② 無効化: 損切り ' + n(t.stop) + (t.plan_exit_rule ? '　' + t.plan_exit_rule : ''),
+      '③ 目標: ' + n(t.target) + (t.plan_target_basis ? '　' + t.plan_target_basis : ''),
+      '計画RR: ' + n(t.planned_rr) + '　' + (long ? '上限' : '下限') + '価格(RR' + RR + '): ' + n(lim),
+      '補足タグ: ' + ((t.tags || []).join('・') || 'なし') + '　メモ: ' + (t.memo || 'なし'),
       '',
       '【実際】',
       '建て: ' + t.open_price + '（' + t.opened_at.slice(11, 16) + '）　返済: ' + t.close_price + '（' + t.closed_at.slice(11, 16) + '）' +
@@ -158,7 +178,19 @@ window.TradeEdit = (function () {
     ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); done();
   }
 
+  function setupName(o) {
+    var names = T.setups[o.setup];
+    return names ? names[o.side === 'long' ? 0 : 1] : '型未設定';
+  }
+  // 建玉一覧に出す3行メモの要約
+  function planLine(p) {
+    if (!p.setup && !p.plan_basis) return p.memo ? '📝 ' + esc(p.memo) : '3行メモ未入力（✎ 編集から追記できます）';
+    return '📝 ' + esc(setupName(p)) + (p.plan_basis ? '：' + esc(p.plan_basis) : '') +
+      (p.plan_exit_rule ? '<br>✕ ' + esc(p.plan_exit_rule) : '') + (p.plan_target_basis ? '<br>◎ ' + esc(p.plan_target_basis) : '');
+  }
+
   function copyButton(id) { return '<button type="button" class="editbtn" data-copy="' + esc(id) + '">📋 レビュー用にコピー</button>'; }
 
-  return { open: open, badge: badge, button: button, reviewText: reviewText, copy: copy, copyButton: copyButton };
+  return { open: open, badge: badge, button: button, reviewText: reviewText, copy: copy, copyButton: copyButton,
+           setupName: setupName, planLine: planLine };
 })();

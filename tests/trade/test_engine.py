@@ -12,8 +12,11 @@ def jst(*a):
 
 
 def order(**kw):
-    b = {"symbol": "7203.T", "margin_type": "system", "side": "long", "qty": 100, "price": 1000, "stop": 990}
+    b = {"symbol": "7203.T", "margin_type": "system", "side": "long", "qty": 100, "price": 1000, "stop": 990,
+         "setup": "breakout", "plan_basis": "5MA 上抜け"}
     b.update(kw)
+    if "target" not in b:                                  # 3行メモの目標は必須。指定がなければ建値から 30円先
+        b["target"] = b["price"] + (30 if b["side"] == "long" else -30)
     return OpenIn(**b)
 
 
@@ -127,6 +130,7 @@ def test_stats():
 @pytest.mark.parametrize("kw", [
     {"qty": 150}, {"stop": 1010}, {"target": 990}, {"side": "short", "stop": 990},
     {"tags": ["なにか"]}, {"emotion": "ふつう"}, {"margin_type": "general"},
+    {"setup": "nope"}, {"plan_basis": "   "}, {"setup": None}, {"stop": None},
 ])
 def test_order_validation(kw):
     with pytest.raises(ValueError):
@@ -192,12 +196,14 @@ def test_edit_trade_recomputes_and_keeps_history():
 def test_edit_position():
     acct = e.new_account(NOW)
     p = opened(acct, stop=990)
-    e.edit_position(acct, p["id"], {"memo": "後から追記", "tags": ["ブレイク"], "emotion": "焦り", "stop": None}, NOW)
-    assert p["memo"] == "後から追記" and p["stop"] is None and p["edits"]
+    e.edit_position(acct, p["id"], {"memo": "後から追記", "tags": ["ブレイク"], "emotion": "焦り", "stop": 985,
+                                    "plan_exit_rule": "5分足が 985 割れで確定"}, NOW)
+    assert p["memo"] == "後から追記" and p["stop"] == 985 and p["plan_exit_rule"].startswith("5分足") and p["edits"]
     with pytest.raises(e.TradeError, match="変更できない"):
         e.edit_position(acct, p["id"], {"close_price": 1}, NOW)
     t = e.close_position(acct, p["id"], 100, 1010, jst(2026, 10, 19, 11, 0), jst(2026, 10, 19, 11, 0))
-    assert t["memo"] == "後から追記" and t["r_multiple"] is None
+    assert t["memo"] == "後から追記" and t["r_multiple"] == 0.66                # 制度信用の金利 7円を引いた損益 ÷ リスク 1,500円
+    assert t["setup"] == "breakout" and t["plan_exit_rule"].startswith("5分足")
 
 
 def test_backdated_day_position_waits_for_manual_close():

@@ -31,11 +31,11 @@
   <h2>約定履歴</h2>
   <div class="table-wrap"><table>
     <thead><tr><th>ID</th><th>建日時 → 返済日時</th><th>銘柄</th><th>区分</th><th>売買</th><th class="num">株数</th><th class="num">建値→返済</th>
-      <th class="num">損益</th><th class="num">金利等</th><th class="num">R</th><th>理由タグ / 感情</th><th>メモ</th></tr></thead>
+      <th class="num">損益</th><th class="num">金利等</th><th class="num">R</th><th>型 / 補足タグ / 感情</th><th>根拠 / メモ</th></tr></thead>
     <tbody id="trades"></tbody>
   </table></div>
 </div>
-<script>window.TRADE = {labels: {{ margin_types | tojson }}, tags: {{ tags | tojson }}, emotions: {{ emotions | tojson }}, memo_max: {{ memo_max }}, exit_types: {{ exit_types | tojson }}, rr_base: {{ rr_base }}};</script>
+<script>window.TRADE = {labels: {{ margin_types | tojson }}, tags: {{ tags | tojson }}, emotions: {{ emotions | tojson }}, memo_max: {{ memo_max }}, exit_types: {{ exit_types | tojson }}, rr_base: {{ rr_base }}, setups: {{ setups | tojson }}, plan_max: {{ plan_max }}};</script>
 <script src="/static/js/trade_edit.js?v={{ v }}"></script>
 <script src="/static/js/trade_history.js?v={{ v }}"></script>
 {% endblock %}

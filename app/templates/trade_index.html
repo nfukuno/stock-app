@@ -26,6 +26,14 @@
   .phase.done { border-color:var(--ok); } .phase h3 { font-size:15px; margin:0 0 6px; }
   .phase ul { margin:4px 0; padding-left:20px; } .conds { background:#f7f8fb; border-radius:8px; padding:8px 12px; margin-top:6px; }
   .conds ul { list-style:none; padding-left:0; } .ready { margin-top:6px; font-weight:700; color:var(--ok); }
+  fieldset.plan { border:1px solid var(--accent); border-radius:8px; padding:10px 12px 12px; margin:12px 0 0; display:grid; gap:8px; }
+  fieldset.plan legend { font-weight:700; font-size:13px; padding:0 6px; display:flex; gap:10px; flex-wrap:wrap; }
+  fieldset.plan legend .muted { font-weight:400; }
+  .planrow { display:grid; grid-template-columns:92px minmax(150px,220px) minmax(0,1fr); gap:8px; align-items:center; }
+  .planrow .pl { font-size:13px; font-weight:600; }
+  .planout { font-size:13px; padding:6px 10px; border-radius:6px; background:#f3f6fd; }
+  .planout.ok { background:#e5f6ec; } .planout.ng { background:#fdecea; }
+  @media (max-width:640px) { .planrow { grid-template-columns:1fr; } }
   .alert { background:#ffe1df; border:1px solid #f3b4ae; border-radius:8px; padding:8px 12px; margin-bottom:10px; }
 </style>
 {% endblock %}
@@ -59,17 +67,37 @@
       <label>株数（{{ lot }}株単位）<input name="qty" type="number" min="{{ lot }}" step="{{ lot }}" value="{{ lot }}" required></label>
       <label>約定価格<input name="price" id="price" type="number" step="0.1" min="0.1" required></label>
       <label>約定時刻（空欄 = 今）<input name="executed_at" type="datetime-local" step="1"></label>
-      <label>損切りライン<input name="stop" type="number" step="0.1" min="0.1" placeholder="必須推奨"></label>
-      <label>利確目標<input name="target" type="number" step="0.1" min="0.1"></label>
       <label>感情
         <select name="emotion"><option value="">-</option>{% for e in emotions %}<option>{{ e }}</option>{% endfor %}</select>
       </label>
     </div>
+    <fieldset class="plan">
+      <legend>3行メモ（必須）<span class="muted" id="planhint"></span></legend>
+      <div class="planrow">
+        <span class="pl">① 型・根拠</span>
+        <select name="setup" id="setup" required aria-label="型">
+          <option value="">型を選ぶ</option>
+          {% for k, names in setups.items() %}<option value="{{ k }}">{{ names[0] }}</option>{% endfor %}
+        </select>
+        <input name="plan_basis" id="plan_basis" required maxlength="{{ plan_max }}" aria-label="根拠">
+      </div>
+      <div class="planrow">
+        <span class="pl">② 無効化</span>
+        <input name="stop" id="stop" type="number" step="0.1" min="0.1" required placeholder="損切り価格" aria-label="損切り価格">
+        <input name="plan_exit_rule" id="plan_exit_rule" maxlength="{{ plan_max }}" aria-label="無効化の条件（任意）">
+      </div>
+      <div class="planrow">
+        <span class="pl">③ 目標</span>
+        <input name="target" id="target" type="number" step="0.1" min="0.1" required placeholder="目標価格" aria-label="目標価格">
+        <input name="plan_target_basis" id="plan_target_basis" maxlength="{{ plan_max }}" aria-label="目標の根拠（任意）">
+      </div>
+      <div class="planout" id="planout">損切りと目標を入れると、RR と上限価格を表示します。</div>
+    </fieldset>
     <div style="margin-top:10px">
-      <div class="muted" style="font-size:12px;margin-bottom:4px">エントリー理由</div>
+      <div class="muted" style="font-size:12px;margin-bottom:4px">補足タグ（任意）</div>
       <div class="chips">{% for t in tags %}<label><input type="checkbox" name="tags" value="{{ t }}">{{ t }}</label>{% endfor %}</div>
     </div>
-    <label style="display:flex;flex-direction:column;gap:4px;margin-top:10px;font-size:12px;color:var(--muted)">メモ（根拠・シナリオ）
+    <label style="display:flex;flex-direction:column;gap:4px;margin-top:10px;font-size:12px;color:var(--muted)">メモ（任意。シナリオ・気づきなど）
       <textarea name="memo" rows="2" maxlength="{{ memo_max }}"></textarea></label>
     <div style="margin-top:10px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
       <button type="submit">発注（約定として記録）</button>
@@ -111,7 +139,7 @@
   <p class="muted">各フェーズの「次に進む条件」は、この口座の成績から自動で判定しています。</p>
   <div id="roadmap"></div>
 </div>
-<script>window.TRADE = {lot: {{ lot }}, labels: {{ margin_types | tojson }}, tags: {{ tags | tojson }}, emotions: {{ emotions | tojson }}, memo_max: {{ memo_max }}, exit_types: {{ exit_types | tojson }}, rr_base: {{ rr_base }}};</script>
+<script>window.TRADE = {lot: {{ lot }}, labels: {{ margin_types | tojson }}, tags: {{ tags | tojson }}, emotions: {{ emotions | tojson }}, memo_max: {{ memo_max }}, exit_types: {{ exit_types | tojson }}, rr_base: {{ rr_base }}, setups: {{ setups | tojson }}, plan_max: {{ plan_max }}};</script>
 <script src="/static/js/trade_edit.js?v={{ v }}"></script>
 <script src="/static/js/trade.js?v={{ v }}"></script>
 {% endblock %}
