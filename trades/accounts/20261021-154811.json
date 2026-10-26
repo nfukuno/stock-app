@@ -833,7 +833,7 @@
       "side": "long",
       "qty": 100,
       "open_price": 2894.0,
-      "close_price": 2862.5,
+      "close_price": 2940.0,
       "opened_at": "2026-10-26T09:14:01+09:00",
       "closed_at": "2026-10-26T09:23:33+09:00",
       "open_date": "2026-10-26",
@@ -853,13 +853,24 @@
       "exit_type": "plan_target",
       "add_type": null,
       "nanpin_group": false,
-      "gross_pnl": -3150,
+      "gross_pnl": 4600,
       "carry_cost": 0,
       "carry_days": 0,
-      "net_pnl": -3150,
-      "r_multiple": -2.25,
+      "net_pnl": 4600,
+      "r_multiple": 3.29,
       "planned_rr": 2.71,
-      "beyond_stop": true
+      "beyond_stop": false,
+      "edits": [
+        {
+          "at": "2026-10-26T09:23:55+09:00",
+          "changes": {
+            "close_price": [
+              2862.5,
+              2940.0
+            ]
+          }
+        }
+      ]
     }
   ]
 }
