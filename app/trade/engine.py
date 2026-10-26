@@ -4,7 +4,8 @@
 - 現金保証金 = 初期保証金 + 確定損益の累計
 - 実質保証金 = 現金保証金 + min(0, 評価損益合計) - 未払いの金利・貸株料   ※評価益は保証金に算入しない
 - 維持率 = 実質保証金 / 建玉代金。MAINTENANCE_RATE を下回ると追証（新規建不可）
-- 新規建余力 = (実質保証金 - 建玉代金 × MARGIN_RATE) / MARGIN_RATE
+- 余力 = 実質保証金 - Σ(建玉代金 × 区分ごとの保証金率)。新規建余力（信用）= 余力 / MARGIN_RATE、現物買付余力 = 余力
+- 維持率は信用建玉の代金に対して計算する（現物は含めない）
 """
 from __future__ import annotations
 
@@ -119,10 +120,11 @@ def open_position(acct: dict, o, at: datetime, now: datetime, name: str, prices:
         raise TradeError("追証が発生しているため新規建てできません（建玉を返済して維持率を回復してください）")
     if s["effective_margin"] < c.MIN_MARGIN:
         raise TradeError(f"実質保証金が最低保証金 {c.MIN_MARGIN:,} 円を下回っています")
-    need = o.price * o.qty * c.MARGIN_RATE
-    if need > s["free_margin"]:
-        raise TradeError(f"建余力が不足しています（必要保証金 {need:,.0f} 円 / 余力 {max(0, s['free_margin']):,.0f} 円）")
     mt = c.MARGIN_TYPES[o.margin_type]
+    need = o.price * o.qty * mt["margin_rate"]
+    if need > s["free_margin"]:
+        what = "買付代金" if o.margin_type == "cash" else "必要保証金"
+        raise TradeError(f"余力が不足しています（{what} {need:,.0f} 円 / 余力 {max(0, s['free_margin']):,.0f} 円）")
     key = f"{o.symbol}|{o.side}|{o.margin_type}"
     existing = _same_group(acct, key)
     add_type = None
@@ -137,11 +139,12 @@ def open_position(acct: dict, o, at: datetime, now: datetime, name: str, prices:
         "side": o.side, "qty": o.qty, "initial_qty": o.qty, "open_price": o.price,
         "opened_at": at.isoformat(timespec="seconds"), "open_date": at.date().isoformat(),
         "entered_at": now.isoformat(timespec="seconds"),
-        "expiry_date": (expiry_date(at.date(), mt["expiry_months"]) if mt["expiry_months"] else at.date()).isoformat(),
+        "expiry_date": _iso(_expiry_for(o.margin_type, at.date())),
         "stop": o.stop, "target": o.target, "tags": o.tags, "emotion": o.emotion, "memo": o.memo,
         "setup": o.setup, "plan_basis": o.plan_basis, "plan_exit_rule": o.plan_exit_rule,
         "plan_target_basis": o.plan_target_basis,
         "add_type": add_type, "nanpin_group": add_type == "nanpin",
+        "horizon": o.horizon, **{k: _jsonable(getattr(o, k)) for k in SWING_FIELDS},
     }
     acct["positions"].append(pos)
     return pos
@@ -159,7 +162,7 @@ def close_position(acct: dict, position_id: str, qty: int, price: float, at: dat
         _check_time(at, now)
         if at < opened:
             raise TradeError("返済時刻が建てた時刻より前です")
-        if at.date().isoformat() > pos["expiry_date"]:
+        if pos["expiry_date"] and at.date().isoformat() > pos["expiry_date"]:
             raise TradeError("期日を過ぎた建玉です")
     trade = {
         "id": _next_id(acct, "T"), "position_id": pos["id"], "symbol": pos["symbol"], "name": pos["name"],
@@ -175,6 +178,8 @@ def close_position(acct: dict, position_id: str, qty: int, price: float, at: dat
         "setup": pos.get("setup"), "plan_basis": pos.get("plan_basis", ""), "plan_exit_rule": pos.get("plan_exit_rule", ""),
         "plan_target_basis": pos.get("plan_target_basis", ""),
         "exit_reason": reason, "exit_type": exit_type, "add_type": pos.get("add_type"), "nanpin_group": bool(pos.get("nanpin_group")),
+        "horizon": pos.get("horizon", "day"), **{k: pos.get(k) for k in SWING_FIELDS},
+        "reverse_fee": 0, "hold_high": None, "hold_low": None, "hold_range_source": None,
     }
     _derive(trade)
     acct["trades"].append(trade)
@@ -185,23 +190,57 @@ def close_position(acct: dict, position_id: str, qty: int, price: float, at: dat
 
 
 def _derive(t: dict) -> None:
-    """約定の損益・金利・R などを、建値・返済価格・損切り / 利確から計算し直す。"""
+    """約定の損益・金利・R・保有日数・MFE/MAE・保険ストップの滑りなどを計算し直す。"""
     sign, qty, op = _sign(t["side"]), t["qty"], t["open_price"]
+    od, cd = date.fromisoformat(t["open_date"]), date.fromisoformat(t["close_date"])
     t["gross_pnl"] = round((t["close_price"] - op) * qty * sign)
-    t["carry_cost"], t["carry_days"] = carry_cost(t["margin_type"], t["side"], op, qty,
-                                                  date.fromisoformat(t["open_date"]), date.fromisoformat(t["close_date"]))
-    t["net_pnl"] = t["gross_pnl"] - t["carry_cost"] - t["commission"]
+    t["carry_cost"], t["carry_days"] = carry_cost(t["margin_type"], t["side"], op, qty, od, cd)
+    t["carry_total"] = t["carry_cost"] + int(t.get("reverse_fee") or 0)       # 金利・貸株料 ＋ 逆日歩
+    t["net_pnl"] = t["gross_pnl"] - t["carry_total"] - t["commission"]
+    t["holding_bdays"] = trading_days_between(od, cd)
     stop, target = t.get("stop"), t.get("target")
-    risk = abs(op - stop) * qty if stop else None
-    t["r_multiple"] = round(t["net_pnl"] / risk, 2) if risk else None
-    t["planned_rr"] = round(abs(target - op) / abs(op - stop), 2) if stop and target else None
+    per = abs(op - stop) if stop else None                                     # 1株あたりのリスク（1R）
+    t["r_multiple"] = round(t["net_pnl"] / (per * qty), 2) if per else None
+    t["planned_rr"] = round(abs(target - op) / per, 2) if per and target else None
     t["beyond_stop"] = ((t["close_price"] - stop) * sign < 0) if stop else None
+    # MFE / MAE: 保有中の最高値・最安値から、有利・不利に最大どれだけ動いたか（R 単位）
+    hi, lo = t.get("hold_high"), t.get("hold_low")
+    best, worst = (hi, lo) if sign > 0 else (lo, hi)
+    t["mfe_r"] = round((best - op) * sign / per, 2) if per and best is not None else None
+    t["mae_r"] = round((worst - op) * sign / per, 2) if per and worst is not None else None
+    # 保険ストップの滑り: 損切りの決済で、計画価格よりどれだけ不利に約定したか（マイナス = 不利）
+    if stop and t.get("exit_type") in c.STOP_EXITS:
+        slip = (t["close_price"] - stop) * sign
+        t["stop_slip_yen"], t["stop_slip_r"] = round(slip * qty), round(slip / per, 2)
+    else:
+        t["stop_slip_yen"] = t["stop_slip_r"] = None
+    # 決算またぎ: 決算日の大引け後の発表を、建玉を持ったまま越えたか
+    ed = t.get("earnings_date")
+    t["earnings_crossed"] = (od <= date.fromisoformat(ed) < cd) if ed else None
+
+
+def trading_days_between(a: date, b: date) -> int:
+    """a から b までの営業日数（両端を含む。同日なら 1）。"""
+    n, d = 1, a
+    while d < b:
+        d = market.next_trading_day(d)
+        n += 1
+    return n
 
 
 # ---------------------------------------------------------------- 後からの修正・追記
+SWING_FIELDS = ("decision_date", "entry_method", "judge_stop", "next_wall_price", "next_wall_kind", "earnings_date")
 POSITION_FIELDS = {"open_price", "opened_at", "stop", "target", "tags", "emotion", "memo",
-                   "setup", "plan_basis", "plan_exit_rule", "plan_target_basis"}
-TRADE_FIELDS = POSITION_FIELDS | {"close_price", "closed_at", "exit_memo", "exit_type"}
+                   "setup", "plan_basis", "plan_exit_rule", "plan_target_basis", "horizon", *SWING_FIELDS}
+TRADE_FIELDS = POSITION_FIELDS | {"close_price", "closed_at", "exit_memo", "exit_type", "reverse_fee", "hold_high", "hold_low"}
+
+
+def _jsonable(v):
+    return v.isoformat() if isinstance(v, date) else v
+
+
+def _iso(d: date | None) -> str | None:
+    return d.isoformat() if d else None
 
 
 def _check_levels(side: str, price: float, stop: float | None, target: float | None) -> None:
@@ -217,8 +256,13 @@ def _apply_edit(obj: dict, changes: dict, allowed: set, now: datetime) -> dict:
     bad = set(changes) - allowed
     if bad:
         raise TradeError(f"変更できない項目です: {sorted(bad)}")
+    changes = {k: _jsonable(v) for k, v in changes.items()}
     merged = {**obj, **changes}
     _check_levels(obj["side"], merged["open_price"], merged.get("stop"), merged.get("target"))
+    if merged.get("horizon") == "swing" and obj["margin_type"] == "day":
+        raise TradeError("いちにち信用はスイング（持ち越し）にできません")
+    if merged.get("hold_high") is not None and merged.get("hold_low") is not None and merged["hold_high"] < merged["hold_low"]:
+        raise TradeError("保有中の高値が安値より低くなっています")
     diff = {k: [obj.get(k), v] for k, v in changes.items() if obj.get(k) != v}
     if diff:
         obj.update(changes)
@@ -237,9 +281,12 @@ def _times(changes: dict, now: datetime) -> dict:
     return out
 
 
-def _expiry_for(margin_type: str, open_date: date) -> date:
-    months = c.MARGIN_TYPES[margin_type]["expiry_months"]
-    return expiry_date(open_date, months) if months else open_date
+def _expiry_for(margin_type: str, open_date: date) -> date | None:
+    """返済期限。いちにち信用は建日、制度信用は6ヶ月後の期日、一般信用（無期限）と現物は None。"""
+    exp = c.MARGIN_TYPES[margin_type]["expiry"]
+    if exp == "same_day":
+        return open_date
+    return expiry_date(open_date, exp) if exp else None
 
 
 def edit_position(acct: dict, position_id: str, changes: dict, now: datetime) -> dict:
@@ -248,7 +295,7 @@ def edit_position(acct: dict, position_id: str, changes: dict, now: datetime) ->
         raise TradeError("建玉が見つかりません（すでに返済済みの可能性があります）", 404)
     if _apply_edit(pos, _times(changes, now), POSITION_FIELDS, now).get("opened_at"):
         d = datetime.fromisoformat(pos["opened_at"]).date()
-        pos["open_date"], pos["expiry_date"] = d.isoformat(), _expiry_for(pos["margin_type"], d).isoformat()
+        pos["open_date"], pos["expiry_date"] = d.isoformat(), _iso(_expiry_for(pos["margin_type"], d))
     return pos
 
 
@@ -261,7 +308,8 @@ def edit_trade(acct: dict, trade_id: str, changes: dict, now: datetime) -> dict:
     closed = datetime.fromisoformat(changes.get("closed_at", t["closed_at"]))
     if closed < opened:
         raise TradeError("返済日時が建日時より前です")
-    if closed.date() > _expiry_for(t["margin_type"], opened.date()):
+    exp = _expiry_for(t["margin_type"], opened.date())
+    if exp and closed.date() > exp:
         raise TradeError("返済日時が返済期限を過ぎています（いちにち信用は建てた日のうちに返済）")
     diff = _apply_edit(t, changes, TRADE_FIELDS, now)
     if diff:
@@ -300,6 +348,8 @@ def apply_forced(acct: dict, now: datetime, close_price: Callable[[str, date], f
     期限を過ぎてから入力した建玉（TradingView のリプレイなど過去日の練習）は自動返済せず、返済の入力を待つ。"""
     done = []
     for pos in list(acct["positions"]):
+        if not pos["expiry_date"]:
+            continue
         due = date.fromisoformat(pos["expiry_date"])
         if now < at_close(due) or is_backdated(pos):
             continue
@@ -313,14 +363,16 @@ def apply_forced(acct: dict, now: datetime, close_price: Callable[[str, date], f
 
 
 def is_backdated(pos: dict) -> bool:
-    """返済期限（大引け）を過ぎてから入力した建玉か。"""
+    """返済期限（大引け）を過ぎてから入力した建玉か。期限のない区分は常に False。"""
+    if not pos["expiry_date"]:
+        return False
     return datetime.fromisoformat(pos["entered_at"]) >= at_close(date.fromisoformat(pos["expiry_date"]))
 
 
 # ---------------------------------------------------------------- 口座サマリー
 def summary(acct: dict, prices: dict[str, float | None], now: datetime) -> dict:
     today = now.astimezone(JST).date()
-    rows, unreal_total, accrued_total, amount_total, stale = [], 0, 0, 0, False
+    rows, unreal_total, accrued_total, amount_total, need_total, stale = [], 0, 0, 0, 0, False
     for p in acct["positions"]:
         last = prices.get(p["symbol"])
         unreal = round((last - p["open_price"]) * p["qty"] * _sign(p["side"])) if last else None
@@ -330,15 +382,19 @@ def summary(acct: dict, prices: dict[str, float | None], now: datetime) -> dict:
         stale |= last is None
         unreal_total += unreal or 0
         accrued_total += accrued
-        amount_total += amount
+        need_total += amount * c.MARGIN_TYPES[p["margin_type"]]["margin_rate"]
+        if p["margin_type"] != "cash":
+            amount_total += amount
+        ed = p.get("earnings_date")
         rows.append({**p, "last": last, "unrealized": unreal, "accrued_cost": accrued, "amount": round(amount),
-                     "overdue": now >= at_close(date.fromisoformat(p["expiry_date"])),
+                     "overdue": bool(p["expiry_date"]) and now >= at_close(date.fromisoformat(p["expiry_date"])),
+                     "earnings_days": (date.fromisoformat(ed) - today).days if ed else None,
                      "backdated": is_backdated(p),
                      "label": c.MARGIN_TYPES[p["margin_type"]]["label"]})
     cash = cash_balance(acct)
     effective = cash + min(0, unreal_total) - accrued_total
     maintenance = effective / amount_total if amount_total else None
-    free = effective - amount_total * c.MARGIN_RATE
+    free = effective - need_total
     today_trades = [t for t in acct["trades"] if t["close_date"] == today.isoformat()]
     return {
         "account_id": acct["id"], "initial_cash": acct["initial_cash"], "cash": cash,
@@ -347,6 +403,7 @@ def summary(acct: dict, prices: dict[str, float | None], now: datetime) -> dict:
         "position_amount": round(amount_total), "maintenance_rate": maintenance,
         "margin_call": maintenance is not None and maintenance < c.MAINTENANCE_RATE,
         "free_margin": round(free), "buying_power": max(0, round(free / c.MARGIN_RATE)) if effective >= c.MIN_MARGIN else 0,
+        "cash_power": max(0, round(free)),
         "today_realized": sum(t["net_pnl"] for t in today_trades), "today_count": len(today_trades),
         "positions": rows, "groups": _groups(rows), "prices_stale": stale,
     }
@@ -397,6 +454,27 @@ def exit_type_label(t: dict) -> str:
     if t["exit_reason"] != "manual":
         return "強制返済"
     return c.EXIT_TYPES.get(t.get("exit_type") or "", "未分類")
+
+
+def _avg(xs: list) -> float | None:
+    return sum(xs) / len(xs) if xs else None
+
+
+def _swing_stats(ts: list[dict]) -> dict:
+    """持ち越し・MFE/MAE・保険ストップの滑り・決算またぎの集計（デイトレの記録も対象。値がないものは除外）。"""
+    mfe = [t["mfe_r"] for t in ts if t.get("mfe_r") is not None]
+    mae = [t["mae_r"] for t in ts if t.get("mae_r") is not None]
+    # 取り切り率 = 実際の R ÷ MFE（伸びた分のうち何割を取れたか）
+    capture = [t["r_multiple"] / t["mfe_r"] for t in ts if (t.get("mfe_r") or 0) > 0 and t.get("r_multiple") is not None]
+    slips = [t["stop_slip_r"] for t in ts if t.get("stop_slip_r") is not None]
+    return {
+        "avg_hold_bdays": _avg([t["holding_bdays"] for t in ts if t.get("holding_bdays")]),
+        "carry_total": sum(t.get("carry_total", t.get("carry_cost", 0)) for t in ts),
+        "avg_mfe_r": _avg(mfe), "avg_mae_r": _avg(mae), "mfe_count": len(mfe), "avg_capture": _avg(capture),
+        "gap_stops": sum(1 for t in ts if t.get("exit_type") == "gap_stop"),
+        "avg_stop_slip_r": _avg(slips), "stop_slip_count": len(slips),
+        "earnings_crossed": sum(1 for t in ts if t.get("earnings_crossed")),
+    }
 
 
 def stats(trades: list[dict]) -> dict:
@@ -451,6 +529,10 @@ def stats(trades: list[dict]) -> dict:
         "by_emotion": by(lambda t: t["emotion"] or "(なし)"),
         "by_symbol": by(lambda t: f"{t['symbol']} {t['name']}".strip()),
         "by_setup": by(setup_label),
+        "by_horizon": by(lambda t: c.HORIZONS[t.get("horizon") or "day"]),
+        "by_entry_method": by(lambda t: c.ENTRY_METHODS.get(t.get("entry_method") or "", "未設定（デイトレなど）")),
+        "by_earnings": by(lambda t: {True: "決算をまたいだ", False: "またいでいない"}.get(t.get("earnings_crossed"), "決算日未入力")),
+        **_swing_stats(ts),
         "by_rr_rule": by(rr_rule_label),
         "below_rr_base": sum(1 for t in ts if t.get("planned_rr") is not None and t["planned_rr"] < c.RR_BASE),
         "by_exit_type": by(exit_type_label, [*c.EXIT_TYPES.values(), "強制返済", "未分類"].index),
@@ -480,6 +562,17 @@ CSV_COLUMNS = [
     ("損益(金利等込)", lambda t: t["net_pnl"]), ("金利等", lambda t: t["carry_cost"]),
     ("R倍数", lambda t: t.get("r_multiple")), ("損切りライン", lambda t: t.get("stop")),
     ("利確目標", lambda t: t.get("target")), ("計画RR", lambda t: t.get("planned_rr")),
+    ("時間軸", lambda t: c.HORIZONS[t.get("horizon") or "day"]),
+    ("判断日", lambda t: t.get("decision_date") or ""),
+    ("エントリー方法", lambda t: c.ENTRY_METHODS.get(t.get("entry_method") or "", "")),
+    ("保有営業日数", lambda t: t.get("holding_bdays")),
+    ("判断ストップ", lambda t: t.get("judge_stop")),
+    ("次の壁", lambda t: t.get("next_wall_price")), ("次の壁の種類", lambda t: t.get("next_wall_kind") or ""),
+    ("次回決算日", lambda t: t.get("earnings_date") or ""),
+    ("決算またぎ", lambda t: {True: "あり", False: "なし"}.get(t.get("earnings_crossed"), "")),
+    ("持ち越し費用(金利等+逆日歩)", lambda t: t.get("carry_total", t.get("carry_cost"))), ("逆日歩", lambda t: t.get("reverse_fee") or 0),
+    ("MFE(R)", lambda t: t.get("mfe_r")), ("MAE(R)", lambda t: t.get("mae_r")),
+    ("保険ストップの滑り(円)", lambda t: t.get("stop_slip_yen")), ("保険ストップの滑り(R)", lambda t: t.get("stop_slip_r")),
     ("型", setup_label), ("根拠", lambda t: t.get("plan_basis") or ""),
     ("無効化の条件", lambda t: t.get("plan_exit_rule") or ""), ("目標の根拠", lambda t: t.get("plan_target_basis") or ""),
     (f"上限価格(RR{c.RR_BASE})", lambda t: entry_limit(t.get("stop"), t.get("target"))),

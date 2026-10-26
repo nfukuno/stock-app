@@ -26,6 +26,14 @@
   .phase.done { border-color:var(--ok); } .phase h3 { font-size:15px; margin:0 0 6px; }
   .phase ul { margin:4px 0; padding-left:20px; } .conds { background:#f7f8fb; border-radius:8px; padding:8px 12px; margin-top:6px; }
   .conds ul { list-style:none; padding-left:0; } .ready { margin-top:6px; font-weight:700; color:var(--ok); }
+  .tabs { display:flex; gap:0; align-items:center; margin-bottom:12px; flex-wrap:wrap; }
+  .tabs input { display:none; }
+  .tabs label span { display:block; padding:7px 22px; border:1px solid var(--line); cursor:pointer; font-weight:600; }
+  .tabs label:first-child span { border-radius:8px 0 0 8px; } .tabs label:nth-child(2) span { border-radius:0 8px 8px 0; border-left:0; }
+  .tabs input:checked + span { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .tabs .muted { margin-left:12px; font-size:12px; }
+  fieldset.plan.swing { border-color:#8a6d1f; }
+  .badge.swing { background:#fbefd0; } .badge.earn { background:#ffe1df; }
   fieldset.plan { border:1px solid var(--accent); border-radius:8px; padding:10px 12px 12px; margin:12px 0 0; display:grid; gap:8px; }
   fieldset.plan legend { font-weight:700; font-size:13px; padding:0 6px; display:flex; gap:10px; flex-wrap:wrap; }
   fieldset.plan legend .muted { font-weight:400; }
@@ -52,6 +60,11 @@
 <div class="card">
   <h2>新規注文</h2>
   <form id="openform">
+    <div class="tabs" role="tablist" aria-label="時間軸">
+      <label><input type="radio" name="horizon" value="day" checked><span>デイトレ</span></label>
+      <label><input type="radio" name="horizon" value="swing"><span>スイング</span></label>
+      <span class="muted" id="horizonhint">当日中に手仕舞う取引</span>
+    </div>
     <div class="grid">
       <label>銘柄コード<input name="symbol" id="symbol" placeholder="7203 / 285A" required autocomplete="off"></label>
       <label>銘柄名（任意）<input name="name" id="symname" placeholder="自動取得"></label>
@@ -92,6 +105,22 @@
         <input name="plan_target_basis" id="plan_target_basis" maxlength="{{ plan_max }}" aria-label="目標の根拠（任意）">
       </div>
       <div class="planout" id="planout">損切りと目標を入れると、RR と上限価格を表示します。</div>
+    </fieldset>
+    <fieldset class="plan swing" id="swingbox" hidden>
+      <legend>スイングの計画<span class="muted">日足で判断し、持ち越す取引</span></legend>
+      <div class="grid">
+        <label>判断した足の日付（日足確定日）<input name="decision_date" id="decision_date" type="date"></label>
+        <label>エントリー方法
+          <select name="entry_method" id="entry_method"><option value="">選ぶ</option>{% for k, l in entry_methods.items() %}<option value="{{ k }}">{{ l }}</option>{% endfor %}</select>
+        </label>
+        <label>判断ストップ（終値基準・任意）<input name="judge_stop" id="judge_stop" type="number" step="0.1" min="0.1"></label>
+        <label>次の壁の価格<input name="next_wall_price" id="next_wall_price" type="number" step="0.1" min="0.1"></label>
+        <label>次の壁の種類
+          <select name="next_wall_kind"><option value="">選ぶ</option>{% for k in wall_kinds %}<option>{{ k }}</option>{% endfor %}</select>
+        </label>
+        <label>次回決算日（不明なら空欄）<input name="earnings_date" id="earnings_date" type="date"></label>
+      </div>
+      <div class="planout" id="swingout">②の損切り価格は「保険ストップ（逆指値）」として扱います。終値で判断する価格は「判断ストップ」に入れてください。</div>
     </fieldset>
     <div style="margin-top:10px">
       <div class="muted" style="font-size:12px;margin-bottom:4px">補足タグ（任意）</div>
@@ -139,7 +168,7 @@
   <p class="muted">各フェーズの「次に進む条件」は、この口座の成績から自動で判定しています。</p>
   <div id="roadmap"></div>
 </div>
-<script>window.TRADE = {lot: {{ lot }}, labels: {{ margin_types | tojson }}, tags: {{ tags | tojson }}, emotions: {{ emotions | tojson }}, memo_max: {{ memo_max }}, exit_types: {{ exit_types | tojson }}, rr_base: {{ rr_base }}, setups: {{ setups | tojson }}, plan_max: {{ plan_max }}};</script>
+<script>window.TRADE = {lot: {{ lot }}, labels: {{ margin_types | tojson }}, tags: {{ tags | tojson }}, emotions: {{ emotions | tojson }}, memo_max: {{ memo_max }}, exit_types: {{ exit_types | tojson }}, rr_base: {{ rr_base }}, setups: {{ setups | tojson }}, plan_max: {{ plan_max }}, horizons: {{ horizons | tojson }}, entry_methods: {{ entry_methods | tojson }}, wall_kinds: {{ wall_kinds | tojson }}};</script>
 <script src="/static/js/trade_edit.js?v={{ v }}"></script>
 <script src="/static/js/trade.js?v={{ v }}"></script>
 {% endblock %}
